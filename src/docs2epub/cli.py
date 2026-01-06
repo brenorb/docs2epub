@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .docusaurus_next import DocusaurusNextOptions, iter_docusaurus_next
 from .epub import EpubMetadata, build_epub
+from .pandoc_epub2 import build_epub2_with_pandoc
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -33,6 +34,13 @@ def _build_parser() -> argparse.ArgumentParser:
   p.add_argument("--publisher", default=None)
 
   p.add_argument(
+    "--format",
+    default="epub2",
+    choices=["epub2", "epub3"],
+    help="Output format. Default: epub2 (Kindle-friendly).",
+  )
+
+  p.add_argument(
     "--out",
     required=True,
     help="Output EPUB file path.",
@@ -55,19 +63,32 @@ def main(argv: list[str] | None = None) -> int:
   if not chapters:
     raise SystemExit("No chapters scraped (did not find article content).")
 
-  meta = EpubMetadata(
-    title=args.title,
-    author=args.author,
-    language=args.language,
-    identifier=args.identifier,
-    publisher=args.publisher,
-  )
+  out_path: Path
 
-  out_path = build_epub(
-    chapters=chapters,
-    out_file=Path(args.out),
-    meta=meta,
-  )
+  if args.format == "epub2":
+    out_path = build_epub2_with_pandoc(
+      chapters=chapters,
+      out_file=Path(args.out),
+      title=args.title,
+      author=args.author,
+      language=args.language,
+      publisher=args.publisher,
+      identifier=args.identifier,
+    )
+  else:
+    meta = EpubMetadata(
+      title=args.title,
+      author=args.author,
+      language=args.language,
+      identifier=args.identifier,
+      publisher=args.publisher,
+    )
+
+    out_path = build_epub(
+      chapters=chapters,
+      out_file=Path(args.out),
+      meta=meta,
+    )
 
   print(f"Scraped {len(chapters)} pages")
   print(f"EPUB written to: {out_path.resolve()}")
