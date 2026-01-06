@@ -15,7 +15,8 @@ from .model import Chapter
 class PandocEpub2Options:
   toc: bool = True
   toc_depth: int = 2
-  chapter_level: int = 1
+  split_level: int = 1
+  keep_images: bool = False
 
 
 def _wrap_html(title: str, body_html: str) -> str:
@@ -34,6 +35,26 @@ def _wrap_html(title: str, body_html: str) -> str:
 """
 
 
+def _summarize_pandoc_warnings(stderr: str) -> str:
+  warnings = [line for line in stderr.splitlines() if line.startswith("[WARNING]")]
+  if not warnings:
+    return ""
+
+  resource = [w for w in warnings if "Could not fetch resource" in w]
+  duplicate = [w for w in warnings if "Duplicate identifier" in w]
+
+  parts: list[str] = []
+  parts.append(f"pandoc warnings: {len(warnings)} (use -v to see full output)")
+  if duplicate:
+    parts.append(f"- Duplicate identifier: {len(duplicate)} (usually safe; affects internal anchors)")
+  if resource:
+    parts.append(
+      f"- Missing resources: {len(resource)} (some images may be dropped; use --keep-images/-v to inspect)"
+    )
+
+  return "\n".join(parts)
+
+
 def build_epub2_with_pandoc(
   *,
   chapters: Iterable[Chapter],
@@ -43,6 +64,7 @@ def build_epub2_with_pandoc(
   language: str,
   publisher: str | None,
   identifier: str | None,
+  verbose: bool,
   options: PandocEpub2Options | None = None,
 ) -> Path:
   pandoc = shutil.which("pandoc")
@@ -61,7 +83,7 @@ def build_epub2_with_pandoc(
 
     html_files: list[Path] = []
     for ch in chapters:
-      cleaned = clean_html_for_kindle_epub2(ch.html)
+      cleaned = clean_html_for_kindle_epub2(ch.html, keep_images=opts.keep_images)
       html_doc = _wrap_html(ch.title, cleaned)
       fp = tmp_path / f"chapter_{ch.index:04d}.html"
       fp.write_text(html_doc, encoding="utf-8")
@@ -81,14 +103,15 @@ def build_epub2_with_pandoc(
       "encoding=UTF-8",
       "--standalone",
       "--split-level",
-      str(opts.chapter_level),
+      str(opts.split_level),
     ]
 
     if publisher:
       cmd.extend(["--metadata", f"publisher={publisher}"])
 
     if identifier:
-      cmd.extend(["--epub-metadata", str(identifier)])
+      # Keep identifier stable for Kindle.
+      cmd.extend(["--metadata", f"identifier={identifier}"])
 
     if opts.toc:
       cmd.extend(["--toc", "--toc-depth", str(opts.toc_depth)])
@@ -96,6 +119,22 @@ def build_epub2_with_pandoc(
     cmd.extend(["-o", str(out_path)])
     cmd.extend([str(p) for p in html_files])
 
-    subprocess.run(cmd, check=True)
+    proc = subprocess.run(
+      cmd,
+      stdout=subprocess.PIPE,
+      stderr=subprocess.PIPE,
+      text=True,
+    )
+
+    if proc.returncode != 0:
+      # On failure, always show stderr.
+      raise RuntimeError(f"pandoc failed (exit {proc.returncode}):\n{proc.stderr.strip()}")
+
+    if verbose and proc.stderr.strip():
+      print(proc.stderr.strip())
+    elif proc.stderr.strip():
+      summary = _summarize_pandoc_warnings(proc.stderr)
+      if summary:
+        print(summary)
 
   return out_path

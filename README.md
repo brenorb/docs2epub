@@ -20,6 +20,11 @@ uv run docs2epub --help
 ```bash
 uvx docs2epub \
   https://www.techinterviewhandbook.org/software-engineering-interview-guide/ \
+  tech-interview-handbook.epub
+
+# Optional (override inferred metadata)
+uvx docs2epub \
+  https://www.techinterviewhandbook.org/software-engineering-interview-guide/ \
   tech-interview-handbook.epub \
   --title "Tech Interview Handbook" \
   --author "Yangshun Tay"

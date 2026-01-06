@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .docusaurus_next import DocusaurusNextOptions, iter_docusaurus_next
 from .epub import EpubMetadata, build_epub
-from .pandoc_epub2 import build_epub2_with_pandoc
+from .pandoc_epub2 import PandocEpub2Options, build_epub2_with_pandoc
+
+
+def _infer_defaults(start_url: str) -> tuple[str, str, str]:
+  parsed = urlparse(start_url)
+  host = parsed.netloc or "docs"
+  title = host
+  author = host
+  language = "en"
+  return title, author, language
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -49,9 +59,9 @@ def _build_parser() -> argparse.ArgumentParser:
   p.add_argument("--max-pages", type=int, default=None)
   p.add_argument("--sleep-s", type=float, default=0.5)
 
-  p.add_argument("--title", required=True)
-  p.add_argument("--author", required=True)
-  p.add_argument("--language", default="en")
+  p.add_argument("--title", default=None)
+  p.add_argument("--author", default=None)
+  p.add_argument("--language", default=None)
   p.add_argument("--identifier", default=None)
   p.add_argument("--publisher", default=None)
 
@@ -60,6 +70,19 @@ def _build_parser() -> argparse.ArgumentParser:
     default="epub2",
     choices=["epub2", "epub3"],
     help="Output format. Default: epub2 (Kindle-friendly).",
+  )
+
+  p.add_argument(
+    "--keep-images",
+    action="store_true",
+    help="Keep and embed remote images (may be slower and can trigger fetch warnings).",
+  )
+
+  p.add_argument(
+    "-v",
+    "--verbose",
+    action="store_true",
+    help="Verbose output (shows full pandoc warnings).",
   )
 
   return p
@@ -72,10 +95,13 @@ def main(argv: list[str] | None = None) -> int:
   out_value = args.out or args.out_pos
 
   if not start_url or not out_value:
-    raise SystemExit(
-      "Usage: docs2epub <START_URL> <OUT.epub> --title ... --author ...\n"
-      "(or use --start-url/--out flags)"
-    )
+    raise SystemExit("Usage: docs2epub <START_URL> <OUT.epub> [options]")
+
+  inferred_title, inferred_author, inferred_language = _infer_defaults(start_url)
+
+  title = args.title or inferred_title
+  author = args.author or inferred_author
+  language = args.language or inferred_language
 
   options = DocusaurusNextOptions(
     start_url=start_url,
@@ -86,26 +112,27 @@ def main(argv: list[str] | None = None) -> int:
 
   chapters = iter_docusaurus_next(options)
   if not chapters:
-    raise SystemExit("No chapters scraped (did not find article content).")
+    raise SystemExit("No pages scraped (did not find article content).")
 
-  out_path: Path
   out_path_value = Path(out_value)
 
   if args.format == "epub2":
     out_path = build_epub2_with_pandoc(
       chapters=chapters,
       out_file=out_path_value,
-      title=args.title,
-      author=args.author,
-      language=args.language,
+      title=title,
+      author=author,
+      language=language,
       publisher=args.publisher,
       identifier=args.identifier,
+      verbose=args.verbose,
+      options=PandocEpub2Options(keep_images=args.keep_images),
     )
   else:
     meta = EpubMetadata(
-      title=args.title,
-      author=args.author,
-      language=args.language,
+      title=title,
+      author=author,
+      language=language,
       identifier=args.identifier,
       publisher=args.publisher,
     )
@@ -116,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
       meta=meta,
     )
 
+  size_mb = out_path.stat().st_size / (1024 * 1024)
   print(f"Scraped {len(chapters)} pages")
-  print(f"EPUB written to: {out_path.resolve()}")
+  print(f"EPUB written to: {out_path.resolve()} ({size_mb:.2f} MB)")
   return 0
