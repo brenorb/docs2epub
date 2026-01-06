@@ -1,0 +1,36 @@
+[project]
+name = "docs2epub"
+version = "0.1.0"
+description = "Turn documentation sites into an EPUB (Kindle-friendly)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+  { name = "Breno Brito" },
+]
+dependencies = [
+  "beautifulsoup4>=4.14.3",
+  "ebooklib>=0.20",
+  "lxml>=6.0.2",
+  "requests>=2.32.5",
+]
+
+[project.scripts]
+docs2epub = "docs2epub.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-cov>=4.1.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.26.0"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
