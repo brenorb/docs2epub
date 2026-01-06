@@ -15,6 +15,16 @@ uv run docs2epub --help
 
 ## Usage
 
+### uvx (no install)
+
+```bash
+uvx docs2epub \
+  https://www.techinterviewhandbook.org/software-engineering-interview-guide/ \
+  tech-interview-handbook.epub \
+  --title "Tech Interview Handbook" \
+  --author "Yangshun Tay"
+```
+
 ### Docusaurus “Next” crawl
 
 ```bash
