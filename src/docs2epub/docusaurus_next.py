@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -11,6 +11,48 @@ from .model import Chapter
 
 
 DEFAULT_USER_AGENT = "docs2epub/0.1 (+https://github.com/brenorb/docs2epub)"
+
+_SIDEBAR_SELECTORS = [
+  'aside[data-testid="table-of-contents"]',
+  "aside#table-of-contents",
+  'nav[aria-label="Table of contents"]',
+  'nav[aria-label="Table of Contents"]',
+  'nav[aria-label="Docs sidebar"]',
+  'nav[aria-label="Docs navigation"]',
+  'nav[aria-label="Documentation"]',
+  'nav[aria-label="Docs"]',
+  "aside.theme-doc-sidebar-container",
+  "div.theme-doc-sidebar-container",
+  "nav.theme-doc-sidebar-menu",
+  "nav.menu",
+  'nav[class*="menu"]',
+  'aside[class*="sidebar"]',
+  'nav[class*="sidebar"]',
+]
+
+_NON_DOC_EXTENSIONS = {
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".css",
+  ".js",
+  ".map",
+  ".json",
+  ".xml",
+  ".rss",
+  ".pdf",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".tgz",
+  ".epub",
+  ".mp4",
+  ".mp3",
+  ".wav",
+}
 
 
 @dataclass(frozen=True)
@@ -44,6 +86,179 @@ def _extract_article(soup: BeautifulSoup) -> Tag:
   if role_main:
     return role_main
   raise RuntimeError("Could not find <article> in page HTML")
+
+
+def _canonicalize_url(url: str) -> str:
+  parsed = urlparse(url)
+  path = parsed.path or "/"
+  if path != "/" and path.endswith("/"):
+    path = path.rstrip("/")
+  return parsed._replace(
+    scheme=parsed.scheme.lower(),
+    netloc=parsed.netloc.lower(),
+    path=path,
+    query="",
+    fragment="",
+  ).geturl()
+
+
+def _infer_root_path(start_url: str) -> str:
+  parsed = urlparse(start_url)
+  path = (parsed.path or "").rstrip("/")
+  if not path:
+    return ""
+  parts = path.split("/")
+  if len(parts) <= 2:
+    return path
+  return "/".join(parts[:-1])
+
+
+def _path_within_root(path: str, root_path: str) -> bool:
+  if not root_path or root_path == "/":
+    return True
+  if path == root_path:
+    return True
+  root = root_path if root_path.endswith("/") else f"{root_path}/"
+  return path.startswith(root)
+
+
+def _is_probable_doc_link(url: str) -> bool:
+  parsed = urlparse(url)
+  path = (parsed.path or "").lower()
+  for ext in _NON_DOC_EXTENSIONS:
+    if path.endswith(ext):
+      return False
+  return True
+
+
+def _sidebar_candidates(soup: BeautifulSoup) -> list[Tag]:
+  seen: set[int] = set()
+  candidates: list[Tag] = []
+
+  for selector in _SIDEBAR_SELECTORS:
+    for el in soup.select(selector):
+      key = id(el)
+      if key in seen:
+        continue
+      seen.add(key)
+      candidates.append(el)
+
+  keywords = ["sidebar", "toc", "table of contents", "table-of-contents", "docs", "documentation"]
+  for el in soup.find_all(["nav", "aside", "div"]):
+    key = id(el)
+    if key in seen:
+      continue
+    label = str(el.get("aria-label") or "").lower()
+    elem_id = str(el.get("id") or "").lower()
+    data_testid = str(el.get("data-testid") or "").lower()
+    classes = " ".join(el.get("class", [])).lower()
+    haystack = " ".join([label, elem_id, data_testid, classes])
+    if any(k in haystack for k in keywords):
+      seen.add(key)
+      candidates.append(el)
+
+  return candidates
+
+
+def _looks_like_pager(container: Tag, links: list[Tag]) -> bool:
+  label = str(container.get("aria-label") or "").lower()
+  if "docs pages" in label or "breadcrumb" in label:
+    return True
+  if not links:
+    return True
+  texts = []
+  for a in links:
+    text = " ".join(a.get_text(" ", strip=True).split()).lower()
+    if text:
+      texts.append(text)
+  if not texts:
+    return False
+  pager_words = {"next", "previous", "prev", "back"}
+  return all(text in pager_words for text in texts)
+
+
+def _extract_sidebar_urls(
+  soup: BeautifulSoup,
+  *,
+  base_url: str,
+  start_url: str,
+) -> list[str]:
+  candidates = _sidebar_candidates(soup)
+  if not candidates:
+    return []
+
+  origin = urlparse(start_url).netloc.lower()
+  root_path = _infer_root_path(start_url)
+  best: list[str] = []
+  for container in candidates:
+    anchors = list(container.find_all("a", href=True))
+    if _looks_like_pager(container, anchors):
+      continue
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for a in anchors:
+      href = str(a.get("href") or "").strip()
+      if not href or href.startswith("#"):
+        continue
+      if href.startswith(("mailto:", "tel:", "javascript:")):
+        continue
+      abs_url = urljoin(base_url, href)
+      parsed = urlparse(abs_url)
+      if parsed.scheme not in ("http", "https"):
+        continue
+      if origin and parsed.netloc.lower() != origin:
+        continue
+      if not _is_probable_doc_link(abs_url):
+        continue
+      if not _path_within_root(parsed.path or "", root_path):
+        continue
+      canonical = _canonicalize_url(abs_url)
+      if canonical in seen:
+        continue
+      seen.add(canonical)
+      urls.append(canonical)
+
+    if len(urls) > len(best):
+      best = urls
+
+  return best
+
+
+def _extract_content_urls(
+  container: Tag,
+  *,
+  base_url: str,
+  start_url: str,
+) -> list[str]:
+  origin = urlparse(start_url).netloc.lower()
+  root_path = _infer_root_path(start_url)
+  urls: list[str] = []
+  seen: set[str] = set()
+
+  for a in container.find_all("a", href=True):
+    href = str(a.get("href") or "").strip()
+    if not href or href.startswith("#"):
+      continue
+    if href.startswith(("mailto:", "tel:", "javascript:")):
+      continue
+    abs_url = urljoin(base_url, href)
+    parsed = urlparse(abs_url)
+    if parsed.scheme not in ("http", "https"):
+      continue
+    if origin and parsed.netloc.lower() != origin:
+      continue
+    if not _is_probable_doc_link(abs_url):
+      continue
+    if not _path_within_root(parsed.path or "", root_path):
+      continue
+    canonical = _canonicalize_url(abs_url)
+    if canonical in seen:
+      continue
+    seen.add(canonical)
+    urls.append(canonical)
+
+  return urls
 
 
 def _remove_unwanted(article: Tag) -> None:
@@ -100,46 +315,90 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
   visited: set[str] = set()
   chapters: list[Chapter] = []
 
-  idx = 1
-  while True:
-    if options.max_pages is not None and idx > options.max_pages:
-      break
-
-    if url in visited:
-      break
-    visited.add(url)
-
-    resp = session.get(url, timeout=30)
+  def fetch_soup(target_url: str) -> BeautifulSoup:
+    resp = session.get(target_url, timeout=30)
     resp.raise_for_status()
+    return BeautifulSoup(resp.text, "lxml")
 
-    soup = BeautifulSoup(resp.text, "lxml")
-    article = _extract_article(soup)
+  initial_soup = fetch_soup(url)
+  sidebar_urls = _extract_sidebar_urls(initial_soup, base_url=base_url, start_url=url)
+  initial_key = _canonicalize_url(url)
 
+  def consume_page(target_url: str, *, soup: BeautifulSoup | None = None) -> Tag | None:
+    if options.max_pages is not None and len(chapters) >= options.max_pages:
+      return None
+    key = _canonicalize_url(target_url)
+    if key in visited:
+      return None
+    visited.add(key)
+
+    page_soup = soup if soup is not None else fetch_soup(target_url)
+
+    article = _extract_article(page_soup)
     title_el = article.find(["h1", "h2"])
     title = (
-      " ".join(title_el.get_text(" ", strip=True).split()) if title_el else f"Chapter {idx}"
+      " ".join(title_el.get_text(" ", strip=True).split())
+      if title_el
+      else f"Chapter {len(chapters) + 1}"
     )
 
     _remove_unwanted(article)
-    _absolutize_urls(article, base_url=base_url)
+    _absolutize_urls(article, base_url=target_url)
 
     for a in list(article.select('a.hash-link[href^="#"]')):
       a.decompose()
 
     html = article.decode_contents()
+    chapters.append(Chapter(index=len(chapters) + 1, title=title, url=target_url, html=html))
 
-    chapters.append(Chapter(index=idx, title=title, url=url, html=html))
+    if options.sleep_s > 0 and (options.max_pages is None or len(chapters) < options.max_pages):
+      import time
+
+      time.sleep(options.sleep_s)
+
+    return article
+
+  if sidebar_urls:
+    if initial_key not in {_canonicalize_url(u) for u in sidebar_urls}:
+      sidebar_urls.insert(0, url)
+    queue = list(sidebar_urls)
+    discovered = {_canonicalize_url(u) for u in queue}
+    idx = 0
+    while idx < len(queue):
+      if options.max_pages is not None and len(chapters) >= options.max_pages:
+        break
+      target_url = queue[idx]
+      use_soup = initial_soup if _canonicalize_url(target_url) == initial_key else None
+      article = consume_page(target_url, soup=use_soup)
+      if article is None:
+        idx += 1
+        continue
+      extra = _extract_content_urls(article, base_url=target_url, start_url=url)
+      for link in extra:
+        key = _canonicalize_url(link)
+        if key in discovered:
+          continue
+        discovered.add(key)
+        queue.append(link)
+      idx += 1
+    return chapters
+
+  # Fallback: follow next/previous navigation.
+  current_url = url
+  soup = initial_soup
+  while True:
+    if options.max_pages is not None and len(chapters) >= options.max_pages:
+      break
+
+    article = consume_page(current_url, soup=soup)
+    if article is None:
+      break
 
     next_url = _extract_next_url(soup, base_url=base_url)
     if not next_url:
       break
 
-    url = next_url
-    idx += 1
-
-    if options.sleep_s > 0:
-      import time
-
-      time.sleep(options.sleep_s)
+    current_url = next_url
+    soup = fetch_soup(current_url)
 
   return chapters
