@@ -39,12 +39,17 @@ def _extract_article(soup: BeautifulSoup) -> Tag:
     article = main.find("article")
     if article:
       return article
+    return main
+  role_main = soup.find(attrs={"role": "main"})
+  if role_main:
+    return role_main
   raise RuntimeError("Could not find <article> in page HTML")
 
 
 def _remove_unwanted(article: Tag) -> None:
   for selector in [
     'nav[aria-label="Breadcrumbs"]',
+    'nav[aria-label="Breadcrumb"]',
     'nav[aria-label="Docs pages"]',
     "div.theme-doc-footer",
     "div.theme-doc-footer-edit-meta-row",
