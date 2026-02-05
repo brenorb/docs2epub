@@ -88,6 +88,27 @@ def _extract_article(soup: BeautifulSoup) -> Tag:
   raise RuntimeError("Could not find <article> in page HTML")
 
 
+def _extract_canonical_url(soup: BeautifulSoup, *, base_url: str) -> str | None:
+  for link in soup.find_all("link", href=True, rel=True):
+    rel = link.get("rel")
+    rel_values = []
+    if isinstance(rel, list):
+      rel_values = [str(r).lower() for r in rel]
+    else:
+      rel_values = [str(rel).lower()]
+    if "canonical" not in rel_values:
+      continue
+    href = str(link.get("href") or "").strip()
+    if not href:
+      continue
+    canonical = urljoin(base_url, href)
+    parsed = urlparse(canonical)
+    if parsed.scheme not in ("http", "https"):
+      continue
+    return canonical
+  return None
+
+
 def _canonicalize_url(url: str) -> str:
   parsed = urlparse(url)
   path = parsed.path or "/"
@@ -321,6 +342,17 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
     return BeautifulSoup(resp.text, "lxml")
 
   initial_soup = fetch_soup(url)
+  canonical = _extract_canonical_url(initial_soup, base_url=url)
+  if options.base_url is None and canonical:
+    start_origin = urlparse(url).netloc.lower()
+    canonical_origin = urlparse(canonical).netloc.lower()
+    if canonical_origin == start_origin:
+      canonical_key = _canonicalize_url(canonical)
+      if canonical_key != _canonicalize_url(url):
+        url = canonical
+        base_url = canonical
+        initial_soup = fetch_soup(url)
+
   sidebar_urls = _extract_sidebar_urls(initial_soup, base_url=base_url, start_url=url)
   initial_key = _canonicalize_url(url)
 
@@ -342,7 +374,12 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
           return None
         raise
 
-    article = _extract_article(page_soup)
+    try:
+      article = _extract_article(page_soup)
+    except RuntimeError:
+      if key != initial_key:
+        return None
+      raise
     title_el = article.find(["h1", "h2"])
     title = (
       " ".join(title_el.get_text(" ", strip=True).split())

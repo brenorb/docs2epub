@@ -33,9 +33,21 @@ This file documents local conventions for working on `docs2epub`.
 - Build artifacts with `uv build` before publishing.
 - Publish with `uv publish` when explicitly requested.
 - Do not commit generated EPUBs or other artifacts.
+- Publishing is done via GitHub Actions on tag `v*` using `PYPI_API_TOKEN` in repo secrets.
+- Local `uv publish` requires a token in env (`UV_PUBLISH_TOKEN`) and will fail without it.
 
 **Validation**
 - Quick manual checks (optional):
   - `uvx --from . docs2epub https://midl.gitbook.io/midl out.epub`
   - `uvx --from . docs2epub https://tutorial.docusaurus.io/docs/intro out.epub`
 - Clean up any generated files after validation.
+
+**Operational Notes**
+- Sidebar crawls can contain dead links; skip 404/410 instead of failing the whole run.
+- Some Sphinx docs rely on `<link rel="canonical">` for the real base path; refetch canonical
+  and resolve sidebar links against it.
+- Some linked pages are app shells (no `<article>/<main>`); skip those unless it’s the start page.
+- PyPI propagation can lag after a successful publish; `uvx` may not see the new version immediately.
+  Use `uvx --from .` for local validation or wait and retry.
+- `uvx --from .` can reuse cached wheels if the version is unchanged; use `UV_NO_CACHE=1` or bump
+  the version to force rebuild.

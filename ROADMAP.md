@@ -1,0 +1,9 @@
+https://pyodide.org/en/stable/
+https://trunkbaseddevelopment.com/
+https://socialskillswisdom.com/
+https://bookofpook.com/
+https://basecamp.com/gettingreal
+https://basecamp.com/shapeup
+https://rlhfbook.com/
+https://huggingface.co/spaces/nanotron/ultrascale-playbook
+https://wesmckinney.com/book/
