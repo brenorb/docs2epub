@@ -85,6 +85,22 @@ def _extract_article(soup: BeautifulSoup) -> Tag:
   role_main = soup.find(attrs={"role": "main"})
   if role_main:
     return role_main
+  for selector in [
+    "div#content",
+    "div.content",
+    "div#main",
+    "div.main",
+    "div#page",
+    "div.page",
+    "div.document",
+    "div#document",
+  ]:
+    candidate = soup.select_one(selector)
+    if candidate:
+      return candidate
+  body = soup.find("body")
+  if body:
+    return body
   raise RuntimeError("Could not find <article> in page HTML")
 
 
@@ -386,6 +402,10 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       if title_el
       else f"Chapter {len(chapters) + 1}"
     )
+    if title_el is None and article.name == "body":
+      body_text = " ".join(article.get_text(" ", strip=True).split())
+      if len(body_text) < 200:
+        return None
 
     _remove_unwanted(article)
     _absolutize_urls(article, base_url=target_url)

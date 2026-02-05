@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "docs2epub"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

@@ -47,7 +47,9 @@ This file documents local conventions for working on `docs2epub`.
 - Some Sphinx docs rely on `<link rel="canonical">` for the real base path; refetch canonical
   and resolve sidebar links against it.
 - Some linked pages are app shells (no `<article>/<main>`); skip those unless it’s the start page.
+- For single-page books without `<article>`, fall back to `<body>` if it contains enough content.
 - PyPI propagation can lag after a successful publish; `uvx` may not see the new version immediately.
   Use `uvx --from .` for local validation or wait and retry.
 - `uvx --from .` can reuse cached wheels if the version is unchanged; use `UV_NO_CACHE=1` or bump
   the version to force rebuild.
+- If `uvx docs2epub` keeps using an old release, `uv cache clean` refreshes the tool cache.

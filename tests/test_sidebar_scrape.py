@@ -279,3 +279,23 @@ def test_iter_skips_pages_without_article(monkeypatch):
   chapters = iter_docusaurus_next(options)
 
   assert [c.title for c in chapters] == ["Intro", "Other"]
+
+
+def test_iter_falls_back_to_body_when_no_article(monkeypatch):
+  start_url = "https://example.com/book"
+  pages = {
+    start_url: (
+      200,
+      "<html><body><h1>Book</h1><p>All content here</p></body></html>",
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert [c.title for c in chapters] == ["Book"]

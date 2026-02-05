@@ -7,3 +7,4 @@ https://basecamp.com/shapeup
 https://rlhfbook.com/
 https://huggingface.co/spaces/nanotron/ultrascale-playbook
 https://wesmckinney.com/book/
+https://github.com/bitcoinbook/bitcoinbook/blob/develop/BOOK.md
