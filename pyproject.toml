@@ -1,6 +1,6 @@
 [project]
 name = "docs2epub"
-version = "0.1.5"
+version = "0.1.6"
 description = "Turn documentation sites into an EPUB (Kindle-friendly)."
 readme = "README.md"
 requires-python = ">=3.12"

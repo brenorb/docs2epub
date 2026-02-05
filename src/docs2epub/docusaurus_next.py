@@ -332,7 +332,15 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       return None
     visited.add(key)
 
-    page_soup = soup if soup is not None else fetch_soup(target_url)
+    page_soup = soup
+    if page_soup is None:
+      try:
+        page_soup = fetch_soup(target_url)
+      except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status in {404, 410} and key != initial_key:
+          return None
+        raise
 
     article = _extract_article(page_soup)
     title_el = article.find(["h1", "h2"])
