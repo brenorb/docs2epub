@@ -72,10 +72,18 @@ def _build_parser() -> argparse.ArgumentParser:
     help="Output format. Default: epub2 (Kindle-friendly).",
   )
 
+  p.set_defaults(keep_images=True)
   p.add_argument(
     "--keep-images",
+    dest="keep_images",
     action="store_true",
-    help="Keep and embed remote images (may be slower and can trigger fetch warnings).",
+    help="Keep and embed images (default).",
+  )
+  p.add_argument(
+    "--no-images",
+    dest="keep_images",
+    action="store_false",
+    help="Drop images for a smaller/faster output.",
   )
 
   p.add_argument(

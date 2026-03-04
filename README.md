@@ -28,6 +28,12 @@ uvx docs2epub \
   tech-interview-handbook.epub \
   --title "Tech Interview Handbook" \
   --author "Yangshun Tay"
+
+# Optional: skip images
+uvx docs2epub \
+  https://www.techinterviewhandbook.org/software-engineering-interview-guide/ \
+  tech-interview-handbook.epub \
+  --no-images
 ```
 
 ### Docusaurus “Next” crawl
