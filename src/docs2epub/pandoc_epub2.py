@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .kindle_html import clean_html_for_kindle_epub2
+from .kindle_images import KindleImageProcessor
 from .model import Chapter
 
 
@@ -16,7 +17,7 @@ class PandocEpub2Options:
   toc: bool = True
   toc_depth: int = 2
   split_level: int = 1
-  keep_images: bool = False
+  keep_images: bool = True
 
 
 def _wrap_html(title: str, body_html: str) -> str:
@@ -80,14 +81,20 @@ def build_epub2_with_pandoc(
 
   with tempfile.TemporaryDirectory(prefix="docs2epub-pandoc-") as tmp:
     tmp_path = Path(tmp)
+    image_processor = KindleImageProcessor(assets_dir=tmp_path / "assets") if opts.keep_images else None
 
-    html_files: list[Path] = []
+    html_files: list[str] = []
     for ch in chapters:
-      cleaned = clean_html_for_kindle_epub2(ch.html, keep_images=opts.keep_images)
+      cleaned = clean_html_for_kindle_epub2(
+        ch.html,
+        keep_images=opts.keep_images,
+        base_url=ch.url,
+        image_rewriter=image_processor.rewrite if image_processor is not None else None,
+      )
       html_doc = _wrap_html(ch.title, cleaned)
       fp = tmp_path / f"chapter_{ch.index:04d}.html"
       fp.write_text(html_doc, encoding="utf-8")
-      html_files.append(fp)
+      html_files.append(fp.name)
 
     cmd: list[str] = [
       pandoc,
@@ -116,14 +123,16 @@ def build_epub2_with_pandoc(
     if opts.toc:
       cmd.extend(["--toc", "--toc-depth", str(opts.toc_depth)])
 
+    cmd.extend(["--resource-path", str(tmp_path)])
     cmd.extend(["-o", str(out_path)])
-    cmd.extend([str(p) for p in html_files])
+    cmd.extend(html_files)
 
     proc = subprocess.run(
       cmd,
       stdout=subprocess.PIPE,
       stderr=subprocess.PIPE,
       text=True,
+      cwd=tmp_path,
     )
 
     if proc.returncode != 0:
