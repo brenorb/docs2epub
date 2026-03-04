@@ -30,3 +30,23 @@ def test_kindle_cleaner_drops_remote_images_by_default():
     keep_images=False,
   )
   assert "img" not in cleaned
+
+
+def test_kindle_cleaner_drops_relative_images_by_default():
+  cleaned = clean_html_for_kindle_epub2(
+    '<p>x</p><img src="images/a.png" /><p>y</p>',
+    keep_images=False,
+  )
+  assert "img" not in cleaned
+
+
+def test_kindle_cleaner_rewrites_images_when_enabled():
+  cleaned = clean_html_for_kindle_epub2(
+    '<p>x</p><img src="images/a.png" srcset="images/a@2x.png 2x" loading="lazy" /><p>y</p>',
+    keep_images=True,
+    base_url="https://example.com/docs/intro",
+    image_rewriter=lambda src, base_url: "assets/a.png",
+  )
+  assert 'src="assets/a.png"' in cleaned
+  assert "srcset=" not in cleaned
+  assert "loading=" not in cleaned

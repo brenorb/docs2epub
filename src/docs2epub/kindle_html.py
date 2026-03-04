@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from bs4 import BeautifulSoup
 
@@ -9,22 +10,37 @@ def clean_html_for_kindle_epub2(
   html_fragment: str,
   *,
   keep_images: bool,
+  base_url: str | None = None,
+  image_rewriter: Callable[[str, str], str | None] | None = None,
 ) -> str:
   """Best-effort HTML cleanup for Kindle-friendly EPUB2.
 
   This is intentionally conservative: it strips known-problematic attributes
   and tags that commonly cause Send-to-Kindle conversion issues.
-
-  By default we drop remote images to avoid pandoc fetch failures.
   """
 
   soup = BeautifulSoup(html_fragment, "lxml")
 
-  if not keep_images:
-    for img in list(soup.find_all("img")):
-      src = str(img.get("src") or "")
-      if src.startswith("http://") or src.startswith("https://"):
+  for img in list(soup.find_all("img")):
+    src = str(img.get("src") or "")
+
+    if not keep_images:
+      img.decompose()
+      continue
+
+    if not src:
+      img.decompose()
+      continue
+
+    for attr in ["srcset", "sizes", "loading", "decoding", "fetchpriority"]:
+      img.attrs.pop(attr, None)
+
+    if image_rewriter is not None and base_url:
+      rewritten = image_rewriter(src, base_url)
+      if not rewritten:
         img.decompose()
+        continue
+      img["src"] = rewritten
 
   # EPUB2: <u> tag isn't consistently supported; convert to a span.
   for u in list(soup.find_all("u")):

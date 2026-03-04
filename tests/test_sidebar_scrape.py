@@ -299,3 +299,28 @@ def test_iter_falls_back_to_body_when_no_article(monkeypatch):
   chapters = iter_docusaurus_next(options)
 
   assert [c.title for c in chapters] == ["Book"]
+
+
+def test_iter_resolves_relative_image_sources_against_page_url(monkeypatch):
+  start_url = "https://example.com/docs/intro"
+  pages = {
+    start_url: (
+      200,
+      (
+        "<html><body>"
+        "<article><h1>Intro</h1><img src=\"images/diagram.png\" /></article>"
+        "</body></html>"
+      ),
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert len(chapters) == 1
+  assert 'src="https://example.com/docs/images/diagram.png"' in chapters[0].html

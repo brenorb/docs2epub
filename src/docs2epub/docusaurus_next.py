@@ -321,11 +321,11 @@ def _absolutize_urls(container: Tag, base_url: str) -> None:
   for el in container.find_all(True):
     if el.has_attr("href"):
       href = str(el.get("href") or "")
-      if href.startswith("/"):
+      if href and not href.startswith(("#", "mailto:", "tel:", "javascript:")):
         el["href"] = urljoin(base_url, href)
     if el.has_attr("src"):
       src = str(el.get("src") or "")
-      if src.startswith("/"):
+      if src and not src.startswith(("data:", "cid:")):
         el["src"] = urljoin(base_url, src)
 
 
