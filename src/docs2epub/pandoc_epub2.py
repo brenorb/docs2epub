@@ -76,7 +76,7 @@ def build_epub2_with_pandoc(
 
   opts = options or PandocEpub2Options()
 
-  out_path = Path(out_file)
+  out_path = Path(out_file).expanduser().resolve()
   out_path.parent.mkdir(parents=True, exist_ok=True)
 
   with tempfile.TemporaryDirectory(prefix="docs2epub-pandoc-") as tmp:
