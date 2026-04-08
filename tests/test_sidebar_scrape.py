@@ -324,3 +324,140 @@ def test_iter_resolves_relative_image_sources_against_page_url(monkeypatch):
 
   assert len(chapters) == 1
   assert 'src="https://example.com/docs/images/diagram.png"' in chapters[0].html
+
+
+def test_iter_scrapes_markdown_files_from_github_tree(monkeypatch):
+  start_url = "https://github.com/acme/book/tree/main/content"
+  first_raw = "https://github.com/acme/book/raw/refs/heads/main/content/01-intro.md"
+  alias_raw = "https://github.com/acme/book/raw/refs/heads/main/content/1-intro.md"
+  second_raw = "https://github.com/acme/book/raw/refs/heads/main/content/02-prompts.md"
+  pages = {
+    start_url: (
+      200,
+      (
+        "<html><body><main><h1>content</h1></main>"
+        '<script type="application/json" data-target="react-app.embeddedData">'
+        '{"payload":{"codeViewTreeRoute":{"path":"content","refInfo":{"name":"main","refType":"branch"},"tree":{"items":['
+        '{"name":"01-intro.md","path":"content/01-intro.md","contentType":"file"},'
+        '{"name":"1-intro.md","path":"content/1-intro.md","contentType":"file"},'
+        '{"name":"images","path":"content/images","contentType":"directory"},'
+        '{"name":"02-prompts.md","path":"content/02-prompts.md","contentType":"file"}'
+        "]}}}}"
+        "</script></body></html>"
+      ),
+    ),
+    first_raw: (
+      200,
+      "# 1. Natural Language to Tool Calls\n\nIntro text\n",
+    ),
+    alias_raw: (
+      200,
+      "[Moved to 01-intro.md](./01-intro.md)\n",
+    ),
+    second_raw: (
+      200,
+      "## 2. Own Your Prompts\n\nPrompt text\n",
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert [c.title for c in chapters] == [
+    "1. Natural Language to Tool Calls",
+    "2. Own Your Prompts",
+  ]
+  assert [c.url for c in chapters] == [first_raw, second_raw]
+  assert "Intro text" in chapters[0].html
+  assert "Prompt text" in chapters[1].html
+  assert len(chapters) == 2
+
+
+def test_iter_fetches_github_blob_markdown_from_raw_url(monkeypatch):
+  start_url = "https://github.com/acme/book/blob/main/content/01-intro.md"
+  raw_url = "https://github.com/acme/book/raw/refs/heads/main/content/01-intro.md"
+  pages = {
+    start_url: (
+      200,
+      (
+        "<html><body><main>"
+        '<a data-testid="raw-button" href="https://github.com/acme/book/raw/refs/heads/main/content/01-intro.md">'
+        "Raw</a>"
+        "</main></body></html>"
+      ),
+    ),
+    raw_url: (
+      200,
+      "# 1. Natural Language to Tool Calls\n\nRendered markdown body\n",
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert len(chapters) == 1
+  assert chapters[0].title == "1. Natural Language to Tool Calls"
+  assert "Rendered markdown body" in chapters[0].html
+  assert chapters[0].url == raw_url
+  assert "<h1>1. Natural Language to Tool Calls</h1>" not in chapters[0].html
+
+
+def test_iter_orders_github_tree_markdown_like_a_book(monkeypatch):
+  start_url = "https://github.com/acme/book/tree/main/content"
+  pages = {
+    start_url: (
+      200,
+      (
+        "<html><body>"
+        '<script type="application/json" data-target="react-app.embeddedData">'
+        '{"payload":{"codeViewTreeRoute":{"path":"content","refInfo":{"name":"main","refType":"branch"},"tree":{"items":['
+        '{"name":"appendix-13-pre-fetch.md","path":"content/appendix-13-pre-fetch.md","contentType":"file"},'
+        '{"name":"brief-history-of-software.md","path":"content/brief-history-of-software.md","contentType":"file"},'
+        '{"name":"factor-02-own-your-prompts.md","path":"content/factor-02-own-your-prompts.md","contentType":"file"},'
+        '{"name":"factor-01-natural-language-to-tool-calls.md","path":"content/factor-01-natural-language-to-tool-calls.md","contentType":"file"}'
+        "]}}}}"
+        "</script></body></html>"
+      ),
+    ),
+    "https://github.com/acme/book/raw/refs/heads/main/content/appendix-13-pre-fetch.md": (
+      200,
+      "# Appendix\n\nAppendix text\n",
+    ),
+    "https://github.com/acme/book/raw/refs/heads/main/content/brief-history-of-software.md": (
+      200,
+      "# Brief history\n\nHistory text\n",
+    ),
+    "https://github.com/acme/book/raw/refs/heads/main/content/factor-02-own-your-prompts.md": (
+      200,
+      "# Factor 2\n\nPrompts text\n",
+    ),
+    "https://github.com/acme/book/raw/refs/heads/main/content/factor-01-natural-language-to-tool-calls.md": (
+      200,
+      "# Factor 1\n\nIntro text\n",
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert [c.title for c in chapters] == [
+    "Brief history",
+    "Factor 1",
+    "Factor 2",
+    "Appendix",
+  ]

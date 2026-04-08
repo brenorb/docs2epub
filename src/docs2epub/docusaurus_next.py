@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
+from markdown import markdown as render_markdown
 
 from .model import Chapter
 
 
 DEFAULT_USER_AGENT = "docs2epub/0.1 (+https://github.com/brenorb/docs2epub)"
+_MARKDOWN_EXTENSIONS = (".md", ".markdown", ".mdx")
+_GITHUB_MOVED_MARKDOWN_RE = re.compile(r"^\s*\[Moved to [^\]]+\]\(([^)]+)\)\s*$", re.DOTALL)
+_GITHUB_BOOK_NUMBER_RE = re.compile(r"^(?:factor|appendix|chapter)-0*(\d+)\b")
 
 _SIDEBAR_SELECTORS = [
   'aside[data-testid="table-of-contents"]',
@@ -166,6 +171,216 @@ def _is_probable_doc_link(url: str) -> bool:
     if path.endswith(ext):
       return False
   return True
+
+
+def _github_repo_parts(url: str) -> tuple[str, str, str, str, str, list[str]] | None:
+  parsed = urlparse(url)
+  host = parsed.netloc.lower()
+  if host not in {"github.com", "www.github.com"}:
+    return None
+  parts = [part for part in parsed.path.split("/") if part]
+  if len(parts) < 4 or parts[2] not in {"blob", "tree"}:
+    return None
+  owner, repo, kind = parts[:3]
+  return parsed.scheme or "https", host, owner, repo, kind, parts[3:]
+
+
+def _derive_github_tree_ref(start_url: str, current_path: str | None) -> str | None:
+  repo_parts = _github_repo_parts(start_url)
+  if repo_parts is None:
+    return None
+
+  _, _, _, _, kind, tail_parts = repo_parts
+  if kind != "tree" or not tail_parts:
+    return None
+
+  path_parts = [part for part in (current_path or "").split("/") if part]
+  if path_parts and len(tail_parts) > len(path_parts) and tail_parts[-len(path_parts) :] == path_parts:
+    ref_parts = tail_parts[: -len(path_parts)]
+    if ref_parts:
+      return "/".join(ref_parts)
+
+  return tail_parts[0]
+
+
+def _github_raw_ref_prefix(ref_type: str) -> str | None:
+  value = ref_type.strip().lower()
+  if value == "branch":
+    return "refs/heads"
+  if value == "tag":
+    return "refs/tags"
+  return None
+
+
+def _build_github_raw_url(
+  *,
+  scheme: str,
+  host: str,
+  owner: str,
+  repo: str,
+  item_path: str,
+  ref_name: str | None,
+  ref_type: str | None,
+  fallback_ref: str | None,
+) -> str | None:
+  path = item_path.strip("/")
+  if not path:
+    return None
+
+  if ref_name:
+    ref_prefix = _github_raw_ref_prefix(ref_type or "")
+    if ref_prefix:
+      return f"{scheme}://{host}/{owner}/{repo}/raw/{ref_prefix}/{ref_name}/{path}"
+
+  if fallback_ref:
+    return f"https://raw.githubusercontent.com/{owner}/{repo}/{fallback_ref}/{path}"
+
+  return None
+
+
+def _extract_github_tree_markdown_urls(soup: BeautifulSoup, *, start_url: str) -> list[str]:
+  repo_parts = _github_repo_parts(start_url)
+  if repo_parts is None:
+    return []
+
+  scheme, host, owner, repo, kind, _ = repo_parts
+  if kind != "tree":
+    return []
+
+  seen: set[str] = set()
+  urls: list[str] = []
+
+  scripts = soup.select('script[data-target="react-app.embeddedData"]')
+  for script in scripts:
+    raw = script.string or script.get_text()
+    if not raw.strip():
+      continue
+    try:
+      payload = json.loads(raw)
+    except json.JSONDecodeError:
+      continue
+
+    route = payload.get("payload", {}).get("codeViewTreeRoute", {})
+    items = route.get("tree", {}).get("items", [])
+    current_path = route.get("path")
+    ref_info = route.get("refInfo", {})
+    ref_name = str(ref_info.get("name") or "").strip() or None
+    ref_type = str(ref_info.get("refType") or "").strip() or None
+    ref = _derive_github_tree_ref(start_url, current_path)
+    if not ref_name and ref:
+      ref_name = ref
+    if not ref_name and not ref:
+      continue
+
+    for item in items:
+      if item.get("contentType") != "file":
+        continue
+      item_path = str(item.get("path") or "").strip("/")
+      if not item_path.lower().endswith(_MARKDOWN_EXTENSIONS):
+        continue
+      url = _build_github_raw_url(
+        scheme=scheme,
+        host=host,
+        owner=owner,
+        repo=repo,
+        item_path=item_path,
+        ref_name=ref_name,
+        ref_type=ref_type,
+        fallback_ref=ref,
+      )
+      if not url:
+        continue
+      canonical = _canonicalize_url(url)
+      if canonical in seen:
+        continue
+      seen.add(canonical)
+      urls.append(url)
+
+    if urls:
+      return sorted(urls, key=_github_markdown_sort_key)
+
+  for a in soup.find_all("a", href=True):
+    href = str(a.get("href") or "").strip()
+    if not href:
+      continue
+    abs_url = urljoin(start_url, href)
+    parsed = urlparse(abs_url)
+    if parsed.netloc.lower() != host:
+      continue
+    if "/blob/" not in parsed.path:
+      continue
+    if not parsed.path.lower().endswith(_MARKDOWN_EXTENSIONS):
+      continue
+    canonical = _canonicalize_url(abs_url)
+    if canonical in seen:
+      continue
+    seen.add(canonical)
+    repo_parts = _github_repo_parts(abs_url)
+    if repo_parts is None:
+      continue
+    _, _, _, _, _, tail_parts = repo_parts
+    item_path = "/".join(tail_parts[1:])
+    raw_url = _build_github_raw_url(
+      scheme=scheme,
+      host=host,
+      owner=owner,
+      repo=repo,
+      item_path=item_path,
+      ref_name=tail_parts[0] if tail_parts else None,
+      ref_type=None,
+      fallback_ref=tail_parts[0] if tail_parts else None,
+    )
+    if raw_url:
+      urls.append(raw_url)
+
+  return sorted(urls, key=_github_markdown_sort_key)
+
+
+def _extract_github_blob_raw_url(soup: BeautifulSoup, *, start_url: str) -> str | None:
+  parsed = urlparse(start_url)
+  if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
+    return None
+  if not parsed.path.lower().endswith(_MARKDOWN_EXTENSIONS):
+    return None
+
+  raw_link = soup.select_one('a[data-testid="raw-button"][href]')
+  if not raw_link:
+    return None
+
+  href = str(raw_link.get("href") or "").strip()
+  if not href:
+    return None
+
+  raw_url = urljoin(start_url, href)
+  parsed_raw = urlparse(raw_url)
+  if parsed_raw.scheme not in ("http", "https"):
+    return None
+  return _canonicalize_url(raw_url)
+
+
+def _github_markdown_sort_key(url: str) -> tuple[int, int, str]:
+  path = (urlparse(url).path or "").strip("/")
+  name = path.rsplit("/", 1)[-1].lower()
+  match = _GITHUB_BOOK_NUMBER_RE.match(name)
+  if match:
+    return (1, int(match.group(1)), name)
+  return (0, 0, name)
+
+
+def _extract_markdown_redirect_target(markdown_text: str) -> str | None:
+  match = _GITHUB_MOVED_MARKDOWN_RE.match(markdown_text.strip())
+  if not match:
+    return None
+  return match.group(1).strip() or None
+
+
+def _markdown_to_html(markdown_text: str) -> Tag:
+  html = render_markdown(markdown_text, extensions=["extra", "sane_lists"])
+  soup = BeautifulSoup(f"<body>{html}</body>", "lxml")
+  body = soup.find("body")
+  if body is None:
+    raise RuntimeError("Could not render markdown body")
+  return body
 
 
 def _sidebar_candidates(soup: BeautifulSoup) -> list[Tag]:
@@ -369,8 +584,60 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
         base_url = canonical
         initial_soup = fetch_soup(url)
 
+  github_tree_urls = _extract_github_tree_markdown_urls(initial_soup, start_url=url)
+  github_blob_raw_url = _extract_github_blob_raw_url(initial_soup, start_url=url)
   sidebar_urls = _extract_sidebar_urls(initial_soup, base_url=base_url, start_url=url)
   initial_key = _canonicalize_url(url)
+  github_markdown_seen: set[str] = set()
+
+  def consume_github_markdown(raw_url: str) -> None:
+    current_url = raw_url
+    redirects_seen: set[str] = set()
+
+    while True:
+      key = _canonicalize_url(current_url)
+      if key in redirects_seen:
+        return
+      redirects_seen.add(key)
+
+      try:
+        resp = session.get(current_url, timeout=30)
+        resp.raise_for_status()
+      except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status in {404, 410}:
+          return
+        raise
+
+      redirect_target = _extract_markdown_redirect_target(resp.text)
+      if redirect_target:
+        current_url = urljoin(current_url, redirect_target)
+        continue
+
+      final_key = _canonicalize_url(current_url)
+      if final_key in github_markdown_seen:
+        return
+      github_markdown_seen.add(final_key)
+
+      article = _markdown_to_html(resp.text)
+      _absolutize_urls(article, base_url=current_url)
+      title_el = article.find(re.compile(r"^h[1-6]$"))
+      title = (
+        " ".join(title_el.get_text(" ", strip=True).split())
+        if title_el
+        else f"Chapter {len(chapters) + 1}"
+      )
+      if title_el and " ".join(title_el.get_text(" ", strip=True).split()) == title:
+        title_el.decompose()
+      html = article.decode_contents()
+      chapters.append(Chapter(index=len(chapters) + 1, title=title, url=current_url, html=html))
+
+      if options.sleep_s > 0 and (options.max_pages is None or len(chapters) < options.max_pages):
+        import time
+
+        time.sleep(options.sleep_s)
+
+      return
 
   def consume_page(target_url: str, *, soup: BeautifulSoup | None = None) -> Tag | None:
     if options.max_pages is not None and len(chapters) >= options.max_pages:
@@ -396,7 +663,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       if key != initial_key:
         return None
       raise
-    title_el = article.find(["h1", "h2"])
+    title_el = article.find(re.compile(r"^h[1-6]$"))
     title = (
       " ".join(title_el.get_text(" ", strip=True).split())
       if title_el
@@ -410,7 +677,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
     _remove_unwanted(article)
     _absolutize_urls(article, base_url=target_url)
 
-    for a in list(article.select('a.hash-link[href^="#"]')):
+    for a in list(article.select('a.hash-link[href^="#"], a.anchor[href^="#"]')):
       a.decompose()
 
     html = article.decode_contents()
@@ -422,6 +689,17 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       time.sleep(options.sleep_s)
 
     return article
+
+  if github_tree_urls:
+    for target_url in github_tree_urls:
+      if options.max_pages is not None and len(chapters) >= options.max_pages:
+        break
+      consume_github_markdown(target_url)
+    return chapters
+
+  if github_blob_raw_url:
+    consume_github_markdown(github_blob_raw_url)
+    return chapters
 
   if sidebar_urls:
     if initial_key not in {_canonicalize_url(u) for u in sidebar_urls}:

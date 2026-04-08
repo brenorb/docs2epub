@@ -63,3 +63,9 @@ This file records manual validation runs and known behaviors for target sites.
 - URL: `https://github.com/bitcoinbook/bitcoinbook/blob/develop/BOOK.md`
 - Behavior: single-page scrape (GitHub HTML page).
 - Validation: `uvx docs2epub https://github.com/bitcoinbook/bitcoinbook/blob/develop/BOOK.md out.epub` scraped 1 page.
+
+## 12 Factor Agents (GitHub tree)
+- URL: `https://github.com/humanlayer/12-factor-agents/tree/main/content`
+- Behavior: GitHub directory pages with Markdown files are downloaded as raw Markdown and rendered locally. Link-only alias files such as `[Moved to ...]` are skipped, and numbered files are ordered like a book instead of alphabetically.
+- Local validation: `uv run docs2epub https://github.com/humanlayer/12-factor-agents/tree/main/content /tmp/12-factor-agents-final.epub` scraped 14 pages.
+- Local validation: `uvx --from . docs2epub https://github.com/humanlayer/12-factor-agents/tree/main/content /tmp/12-factor-agents-final-uvx.epub` scraped 14 pages.
