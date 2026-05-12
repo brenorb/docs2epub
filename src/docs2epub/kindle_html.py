@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 
 from bs4 import BeautifulSoup
@@ -87,7 +86,6 @@ def clean_html_for_kindle_epub2(
       if frag not in all_ids:
         a.attrs.pop("href", None)
 
-  # Normalize whitespace a bit (helps keep diffs smaller and reduces odd output).
-  text = str(soup)
-  text = re.sub(r"\s+", " ", text)
-  return text.strip()
+  if soup.body is not None:
+    return soup.body.decode_contents().strip()
+  return str(soup).strip()

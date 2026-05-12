@@ -75,3 +75,34 @@ def test_kindle_cleaner_drops_images_without_src_even_when_enabled():
     keep_images=True,
   )
   assert "img" not in cleaned
+
+
+def test_kindle_cleaner_preserves_newlines_inside_code_blocks():
+  cleaned = clean_html_for_kindle_epub2(
+    (
+      "<pre><code>"
+      "my-skill/\n"
+      "├── SKILL.md          # Required: metadata + instructions\n"
+      "├── scripts/          # Optional: executable code\n"
+      "└── assets/           # Optional: templates, resources\n"
+      "</code></pre>"
+    ),
+    keep_images=False,
+  )
+  assert "my-skill/\n├── SKILL.md" in cleaned
+  assert "instructions\n├── scripts/" in cleaned
+  assert "code\n└── assets/" in cleaned
+
+
+def test_kindle_cleaner_preserves_shiki_line_breaks_inside_code_blocks():
+  cleaned = clean_html_for_kindle_epub2(
+    (
+      '<pre class="shiki"><code language="text">'
+      '<span class="line"><span>my-skill/</span></span>\n'
+      '<span class="line"><span>├── SKILL.md          # Required: metadata + instructions</span></span>\n'
+      '<span class="line"><span>├── scripts/          # Optional: executable code</span></span>\n'
+      "</code></pre>"
+    ),
+    keep_images=False,
+  )
+  assert "</span></span>\n<span class=\"line\">" in cleaned
