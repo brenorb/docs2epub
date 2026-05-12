@@ -7,7 +7,7 @@ This file records manual validation runs and known behaviors for target sites.
 - Canonical: `https://pyodide.org/en/stable/index.html`
 - Behavior: sidebar links resolve under `/en/stable/`.
 - Non-content pages (e.g., `console.html`) have no `<article>`; those are skipped.
-- Local validation (after fixes): `uvx --from . docs2epub https://pyodide.org/ out.epub` scraped 52 pages.
+- Local validation (revalidated on 2026-05-11): `uvx --from . docs2epub https://pyodide.org/ out.epub` scraped 57 pages.
 
 ## GitBook (MIDL)
 - URL: `https://midl.gitbook.io/midl`
@@ -18,6 +18,11 @@ This file records manual validation runs and known behaviors for target sites.
 - URL: `https://tutorial.docusaurus.io/docs/intro`
 - Behavior: sidebar + index expansion works.
 - Local validation: `uvx --from . docs2epub https://tutorial.docusaurus.io/docs/intro out.epub` scraped 11 pages.
+
+## Agent Skills
+- URL: `https://agentskills.io/`
+- Behavior: canonical start page resolves to `/home`; sidebar crawl works once links are kept within the original crawl scope instead of the canonical page path. Content is extracted from the rendered `#content-area`, avoiding app-shell chrome and repeated `Documentation Index` preambles.
+- Local validation (revalidated on 2026-05-11): `uvx --from . docs2epub https://agentskills.io/ out.epub` scraped 9 pages.
 
 ## Trunk-Based Development
 - URL: `https://trunkbaseddevelopment.com/`

@@ -3,8 +3,11 @@ revision = 3
 requires-python = ">=3.12"
 
 [options]
-exclude-newer = "2026-03-31T22:14:09.759245Z"
+exclude-newer = "2026-05-05T00:54:45.3037Z"
 exclude-newer-span = "P7D"
+
+[options.exclude-newer-package]
+docs2epub = false
 
 [[package]]
 name = "beautifulsoup4"
@@ -277,7 +280,7 @@ wheels = [
 
 [[package]]
 name = "docs2epub"
-version = "0.1.12"
+version = "0.1.13"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

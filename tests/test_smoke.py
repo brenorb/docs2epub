@@ -50,3 +50,28 @@ def test_kindle_cleaner_rewrites_images_when_enabled():
   assert 'src="assets/a.png"' in cleaned
   assert "srcset=" not in cleaned
   assert "loading=" not in cleaned
+
+
+def test_kindle_cleaner_deduplicates_ids_and_drops_broken_fragment_links():
+  cleaned = clean_html_for_kindle_epub2(
+    (
+      '<h1 id="intro">Intro</h1>'
+      '<p id="intro">Duplicate id</p>'
+      '<a href="#intro">ok</a>'
+      '<a href="#missing">broken</a>'
+    ),
+    keep_images=False,
+  )
+  assert 'id="intro"' in cleaned
+  assert 'id="intro-2"' in cleaned
+  assert 'href="#intro"' in cleaned
+  assert '>broken</a>' in cleaned
+  assert 'href="#missing"' not in cleaned
+
+
+def test_kindle_cleaner_drops_images_without_src_even_when_enabled():
+  cleaned = clean_html_for_kindle_epub2(
+    "<p>x</p><img /><p>y</p>",
+    keep_images=True,
+  )
+  assert "img" not in cleaned

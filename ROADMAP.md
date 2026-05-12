@@ -1,4 +1,5 @@
 https://pyodide.org/en/stable/
+https://agentskills.io/
 https://trunkbaseddevelopment.com/
 https://socialskillswisdom.com/
 https://bookofpook.com/

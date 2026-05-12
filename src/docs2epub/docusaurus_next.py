@@ -60,6 +60,11 @@ _NON_DOC_EXTENSIONS = {
 }
 
 
+def _is_markdown_url(url: str) -> bool:
+  path = (urlparse(url).path or "").lower()
+  return path.endswith(_MARKDOWN_EXTENSIONS)
+
+
 @dataclass(frozen=True)
 class DocusaurusNextOptions:
   start_url: str
@@ -91,6 +96,7 @@ def _extract_article(soup: BeautifulSoup) -> Tag:
   if role_main:
     return role_main
   for selector in [
+    "div#content-area",
     "div#content",
     "div.content",
     "div#main",
@@ -513,6 +519,62 @@ def _extract_content_urls(
   return urls
 
 
+def _extract_llms_index_url(
+  soup: BeautifulSoup,
+  *,
+  base_url: str,
+  start_url: str,
+) -> str | None:
+  origin = urlparse(start_url).netloc.lower()
+
+  for a in soup.find_all("a", href=True):
+    href = str(a.get("href") or "").strip()
+    if not href:
+      continue
+    abs_url = urljoin(base_url, href)
+    parsed = urlparse(abs_url)
+    if parsed.scheme not in ("http", "https"):
+      continue
+    if origin and parsed.netloc.lower() != origin:
+      continue
+    if (parsed.path or "").rstrip("/").lower().endswith("/llms.txt"):
+      return abs_url
+
+  return None
+
+
+def _extract_llms_urls(
+  llms_text: str,
+  *,
+  index_url: str,
+  start_url: str,
+) -> list[str]:
+  origin = urlparse(start_url).netloc.lower()
+  root_path = _infer_root_path(start_url)
+  urls: list[str] = []
+  seen: set[str] = set()
+
+  for raw_url in re.findall(r"https?://[^\s)>]+", llms_text):
+    candidate = raw_url.rstrip(".,:;")
+    parsed = urlparse(candidate)
+    if parsed.scheme not in ("http", "https"):
+      continue
+    if origin and parsed.netloc.lower() != origin:
+      continue
+    if not _is_probable_doc_link(candidate):
+      continue
+    if not _path_within_root(parsed.path or "", root_path):
+      continue
+    abs_url = urljoin(index_url, candidate)
+    canonical = _canonicalize_url(abs_url)
+    if canonical in seen:
+      continue
+    seen.add(canonical)
+    urls.append(canonical)
+
+  return urls
+
+
 def _remove_unwanted(article: Tag) -> None:
   for selector in [
     'nav[aria-label="Breadcrumbs"]',
@@ -530,6 +592,33 @@ def _remove_unwanted(article: Tag) -> None:
   ]:
     for el in list(article.select(selector)):
       el.decompose()
+
+
+def _remove_documentation_index_preamble(article: Tag) -> None:
+  for blockquote in list(article.find_all("blockquote")):
+    text = " ".join(blockquote.get_text(" ", strip=True).split()).lower()
+    if "documentation index" in text and "llms.txt" in text:
+      blockquote.decompose()
+
+
+def _extract_title(article: Tag, *, fallback_index: int) -> str:
+  for heading in article.find_all(re.compile(r"^h[1-6]$")):
+    text = " ".join(heading.get_text(" ", strip=True).split())
+    if not text:
+      continue
+    if text.lower() == "documentation index":
+      continue
+    return text
+  return f"Chapter {fallback_index}"
+
+
+def _remove_title_heading(article: Tag, title: str) -> None:
+  normalized_title = " ".join(title.split()).lower()
+  for heading in article.find_all(re.compile(r"^h[1-6]$")):
+    text = " ".join(heading.get_text(" ", strip=True).split()).lower()
+    if text == normalized_title:
+      heading.decompose()
+      return
 
 
 def _absolutize_urls(container: Tag, base_url: str) -> None:
@@ -561,6 +650,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
   session = requests.Session()
   session.headers.update({"User-Agent": options.user_agent})
 
+  crawl_scope_url = options.start_url
   url = options.start_url
   base_url = options.base_url or options.start_url
 
@@ -586,11 +676,13 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
 
   github_tree_urls = _extract_github_tree_markdown_urls(initial_soup, start_url=url)
   github_blob_raw_url = _extract_github_blob_raw_url(initial_soup, start_url=url)
-  sidebar_urls = _extract_sidebar_urls(initial_soup, base_url=base_url, start_url=url)
+  sidebar_urls = _extract_sidebar_urls(initial_soup, base_url=base_url, start_url=crawl_scope_url)
+  llms_index_url = _extract_llms_index_url(initial_soup, base_url=base_url, start_url=crawl_scope_url)
   initial_key = _canonicalize_url(url)
   github_markdown_seen: set[str] = set()
+  markdown_seen: set[str] = set()
 
-  def consume_github_markdown(raw_url: str) -> None:
+  def consume_markdown_url(raw_url: str) -> None:
     current_url = raw_url
     redirects_seen: set[str] = set()
 
@@ -615,20 +707,15 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
         continue
 
       final_key = _canonicalize_url(current_url)
-      if final_key in github_markdown_seen:
+      if final_key in markdown_seen:
         return
-      github_markdown_seen.add(final_key)
+      markdown_seen.add(final_key)
 
       article = _markdown_to_html(resp.text)
+      _remove_documentation_index_preamble(article)
       _absolutize_urls(article, base_url=current_url)
-      title_el = article.find(re.compile(r"^h[1-6]$"))
-      title = (
-        " ".join(title_el.get_text(" ", strip=True).split())
-        if title_el
-        else f"Chapter {len(chapters) + 1}"
-      )
-      if title_el and " ".join(title_el.get_text(" ", strip=True).split()) == title:
-        title_el.decompose()
+      title = _extract_title(article, fallback_index=len(chapters) + 1)
+      _remove_title_heading(article, title)
       html = article.decode_contents()
       chapters.append(Chapter(index=len(chapters) + 1, title=title, url=current_url, html=html))
 
@@ -638,6 +725,10 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
         time.sleep(options.sleep_s)
 
       return
+
+  def consume_github_markdown(raw_url: str) -> None:
+    github_markdown_seen.add(_canonicalize_url(raw_url))
+    consume_markdown_url(raw_url)
 
   def consume_page(target_url: str, *, soup: BeautifulSoup | None = None) -> Tag | None:
     if options.max_pages is not None and len(chapters) >= options.max_pages:
@@ -663,15 +754,16 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       if key != initial_key:
         return None
       raise
-    title_el = article.find(re.compile(r"^h[1-6]$"))
-    title = (
-      " ".join(title_el.get_text(" ", strip=True).split())
-      if title_el
-      else f"Chapter {len(chapters) + 1}"
+    body_text_before_cleanup = (
+      " ".join(article.get_text(" ", strip=True).split()) if article.name == "body" else ""
     )
-    if title_el is None and article.name == "body":
-      body_text = " ".join(article.get_text(" ", strip=True).split())
-      if len(body_text) < 200:
+    _remove_documentation_index_preamble(article)
+    had_explicit_title = article.find(re.compile(r"^h[1-6]$")) is not None
+    title = _extract_title(article, fallback_index=len(chapters) + 1)
+    _remove_title_heading(article, title)
+    title_el = article.find(re.compile(r"^h[1-6]$"), string=re.compile(r"\S"))
+    if title_el is None and article.name == "body" and not had_explicit_title:
+      if len(body_text_before_cleanup) < 200:
         return None
 
     _remove_unwanted(article)
@@ -701,6 +793,19 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
     consume_github_markdown(github_blob_raw_url)
     return chapters
 
+  if llms_index_url and not sidebar_urls:
+    llms_resp = session.get(llms_index_url, timeout=30)
+    llms_resp.raise_for_status()
+    for target_url in _extract_llms_urls(
+      llms_resp.text,
+      index_url=llms_index_url,
+      start_url=crawl_scope_url,
+    ):
+      if options.max_pages is not None and len(chapters) >= options.max_pages:
+        break
+      consume_markdown_url(target_url)
+    return chapters
+
   if sidebar_urls:
     if initial_key not in {_canonicalize_url(u) for u in sidebar_urls}:
       sidebar_urls.insert(0, url)
@@ -716,7 +821,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       if article is None:
         idx += 1
         continue
-      extra = _extract_content_urls(article, base_url=target_url, start_url=url)
+      extra = _extract_content_urls(article, base_url=target_url, start_url=crawl_scope_url)
       for link in extra:
         key = _canonicalize_url(link)
         if key in discovered:

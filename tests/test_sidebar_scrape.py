@@ -249,6 +249,48 @@ def test_iter_refetches_canonical_for_sidebar(monkeypatch):
   assert [c.title for c in chapters] == ["Home", "One"]
 
 
+def test_iter_preserves_original_scope_after_canonical_refetch(monkeypatch):
+  start_url = "https://example.com/"
+  canonical = "https://example.com/home"
+  sidebar = """
+  <nav class="menu">
+    <a href="/home">Home</a>
+    <a href="/specification">Specification</a>
+  </nav>
+  """
+  pages = {
+    start_url: (
+      200,
+      (
+        "<html><head>"
+        f'<link rel="canonical" href="{canonical}" />'
+        "</head><body><article><h1>Landing</h1></article></body></html>"
+      ),
+    ),
+    canonical: (
+      200,
+      f"<html><body>{sidebar}<article><h1>Home</h1><p>Welcome</p></article></body></html>",
+    ),
+    "https://example.com/specification": (
+      200,
+      (
+        f"<html><body>{sidebar}<article><h1>Specification</h1>"
+        "<p>Details</p></article></body></html>"
+      ),
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert [c.title for c in chapters] == ["Home", "Specification"]
+
+
 def test_iter_skips_pages_without_article(monkeypatch):
   start_url = "https://example.com/docs/intro"
   sidebar = """
@@ -324,6 +366,58 @@ def test_iter_resolves_relative_image_sources_against_page_url(monkeypatch):
 
   assert len(chapters) == 1
   assert 'src="https://example.com/docs/images/diagram.png"' in chapters[0].html
+
+
+def test_iter_uses_llms_index_when_no_sidebar(monkeypatch):
+  start_url = "https://example.com/"
+  pages = {
+    start_url: (
+      200,
+      (
+        "<html><body><main><h1>Agent Skills</h1>"
+        '<p><a href="/llms.txt">Documentation Index</a></p>'
+        "</main></body></html>"
+      ),
+    ),
+    "https://example.com/llms.txt": (
+      200,
+      (
+        "# Docs\n\n"
+        "- [Overview](https://example.com/home.md)\n"
+        "- [Quickstart](https://example.com/quickstart.md)\n"
+      ),
+    ),
+    "https://example.com/home.md": (
+      200,
+      (
+        "> ## Documentation Index\n"
+        "> Fetch the complete documentation index at: https://example.com/llms.txt\n"
+        "> Use this file to discover all available pages before exploring further.\n\n"
+        "# Overview\n\nWelcome to the docs.\n"
+      ),
+    ),
+    "https://example.com/quickstart.md": (
+      200,
+      (
+        "> ## Documentation Index\n"
+        "> Fetch the complete documentation index at: https://example.com/llms.txt\n"
+        "> Use this file to discover all available pages before exploring further.\n\n"
+        "# Quickstart\n\nRun the setup.\n"
+      ),
+    ),
+  }
+
+  monkeypatch.setattr(
+    "docs2epub.docusaurus_next.requests.Session",
+    lambda: _make_session_with_status(pages)(),
+  )
+
+  options = DocusaurusNextOptions(start_url=start_url, sleep_s=0)
+  chapters = iter_docusaurus_next(options)
+
+  assert [c.title for c in chapters] == ["Overview", "Quickstart"]
+  assert "Welcome to the docs." in chapters[0].html
+  assert "Run the setup." in chapters[1].html
 
 
 def test_iter_scrapes_markdown_files_from_github_tree(monkeypatch):
