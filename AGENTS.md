@@ -11,6 +11,7 @@ This file documents local conventions for working on `docs2epub`.
 - Use TDD for bug fixes and new behaviors. Add a failing test first.
 - Prefer unit tests with `monkeypatch` and deterministic HTML fixtures.
 - Keep tests fast and offline. Only do real network checks for manual validation.
+- Use `uv` for project Python commands instead of calling `python` directly.
 - Run tests with `uv run pytest -q`.
 
 **Scraping Heuristics**
@@ -26,6 +27,14 @@ This file documents local conventions for working on `docs2epub`.
 - EPUB generation: `src/docs2epub/epub.py` and `src/docs2epub/pandoc_epub2.py`.
 - HTML cleanup: `src/docs2epub/kindle_html.py`.
 - Tests live in `tests/`.
+
+**Git Conventions**
+- Use descriptive branch prefixes based on intent:
+  - `feat/<short-description>` for new features
+  - `fix/<short-description>` for bug fixes
+  - `chore/<short-description>` for maintenance
+  - `docs/<short-description>` for documentation-only changes
+- Avoid generic branch prefixes like `codex/`.
 
 **Release Discipline**
 - Bump version in `pyproject.toml` for user-visible changes.
