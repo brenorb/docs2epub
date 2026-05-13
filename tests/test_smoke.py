@@ -14,6 +14,34 @@ def test_build_epub3_smoke(tmp_path):
   assert path.stat().st_size > 0
 
 
+def test_build_epub3_rewrites_internal_links(tmp_path):
+  import zipfile
+
+  out = tmp_path / "book.epub"
+  chapters = [
+    Chapter(
+      index=1,
+      title="Intro",
+      url="https://example.com/docs/intro",
+      html='<p><a href="https://example.com/docs/next#frag">Next section</a></p>',
+    ),
+    Chapter(
+      index=2,
+      title="Next",
+      url="https://example.com/docs/next",
+      html='<h2 id="frag">Frag</h2><p>Body</p>',
+    ),
+  ]
+  meta = EpubMetadata(title="T", author="A", language="en")
+
+  path = build_epub(chapters=chapters, out_file=out, meta=meta)
+
+  with zipfile.ZipFile(path) as zf:
+    chapter_one = zf.read("EPUB/chap_001.xhtml").decode("utf-8")
+
+  assert 'href="chap_002.xhtml#frag"' in chapter_one
+
+
 def test_kindle_cleaner_strips_tabindex_and_ol_start():
   cleaned = clean_html_for_kindle_epub2(
     '<div tabindex="0"><ol start="2"><li><u>Hi</u></li></ol></div>',

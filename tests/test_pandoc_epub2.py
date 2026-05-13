@@ -138,3 +138,49 @@ def test_build_epub2_summarizes_duplicate_and_missing_resource_warnings(monkeypa
   assert "pandoc warnings: 3" in output
   assert "Duplicate identifier: 2" in output
   assert "Missing resources: 1" in output
+
+
+def test_build_epub2_rewrites_internal_links_to_book_chapters(monkeypatch, tmp_path):
+  monkeypatch.setattr("docs2epub.pandoc_epub2.shutil.which", lambda _: "/usr/bin/pandoc")
+
+  captured: dict[str, str] = {}
+
+  class Proc:
+    returncode = 0
+    stderr = ""
+    stdout = ""
+
+  def fake_run(cmd, **kwargs):
+    cwd = Path(kwargs["cwd"])
+    captured["chapter_1"] = (cwd / "chapter_0001.html").read_text(encoding="utf-8")
+    return Proc()
+
+  monkeypatch.setattr("docs2epub.pandoc_epub2.subprocess.run", fake_run)
+
+  out_file = tmp_path / "out.epub"
+  build_epub2_with_pandoc(
+    chapters=[
+      Chapter(
+        index=1,
+        title="Intro",
+        url="https://example.com/docs/intro",
+        html='<p><a href="https://example.com/docs/next#frag">Next section</a></p>',
+      ),
+      Chapter(
+        index=2,
+        title="Next",
+        url="https://example.com/docs/next",
+        html='<h2 id="frag">Frag</h2><p>Body</p>',
+      ),
+    ],
+    out_file=out_file,
+    title="Book",
+    author="Author",
+    language="en",
+    publisher=None,
+    identifier=None,
+    verbose=False,
+    options=PandocEpub2Options(),
+  )
+
+  assert 'href="chapter_0002.html#frag"' in captured["chapter_1"]

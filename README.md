@@ -4,6 +4,8 @@ Turn documentation sites into an EPUB (Kindle-friendly).
 
 Initial focus: Docusaurus sites that expose a **Next** button (docs navigation).
 
+When multiple scraped pages link to each other, docs2epub rewrites those links to stay inside the generated EPUB.
+
 ## Install (dev)
 
 This project uses Python 3.12+.

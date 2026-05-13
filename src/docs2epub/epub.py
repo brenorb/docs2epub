@@ -9,6 +9,7 @@ from typing import Iterable
 from bs4 import BeautifulSoup
 from ebooklib import epub
 
+from .book_links import canonicalize_book_url, rewrite_internal_book_links
 from .model import Chapter
 
 
@@ -72,6 +73,8 @@ def build_epub(
 ) -> Path:
   out_path = Path(out_file)
   out_path.parent.mkdir(parents=True, exist_ok=True)
+  chapter_list = list(chapters)
+  chapter_file_by_url = {canonicalize_book_url(ch.url): f"chap_{ch.index:03d}.xhtml" for ch in chapter_list}
 
   book = epub.EpubBook()
 
@@ -98,8 +101,13 @@ def build_epub(
   chapter_items: list[epub.EpubHtml] = []
   toc_items: list[epub.Link] = []
 
-  for ch in chapters:
-    body_inner = _extract_body_inner_html(ch.html)
+  for ch in chapter_list:
+    html_with_rewritten_links = rewrite_internal_book_links(
+      ch.html,
+      current_url=ch.url,
+      chapter_file_by_url=chapter_file_by_url,
+    )
+    body_inner = _extract_body_inner_html(html_with_rewritten_links)
     body_inner = _strip_first_h1(body_inner)
 
     content = f"""<h1>{ch.title}</h1>

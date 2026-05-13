@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from .book_links import canonicalize_book_url, rewrite_internal_book_links
 from .kindle_html import clean_html_for_kindle_epub2
 from .kindle_images import KindleImageProcessor
 from .model import Chapter
@@ -75,6 +76,10 @@ def build_epub2_with_pandoc(
     )
 
   opts = options or PandocEpub2Options()
+  chapter_list = list(chapters)
+  chapter_file_by_url = {
+    canonicalize_book_url(ch.url): f"chapter_{ch.index:04d}.html" for ch in chapter_list
+  }
 
   out_path = Path(out_file).expanduser().resolve()
   out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,9 +89,14 @@ def build_epub2_with_pandoc(
     image_processor = KindleImageProcessor(assets_dir=tmp_path / "assets") if opts.keep_images else None
 
     html_files: list[str] = []
-    for ch in chapters:
-      cleaned = clean_html_for_kindle_epub2(
+    for ch in chapter_list:
+      html_with_rewritten_links = rewrite_internal_book_links(
         ch.html,
+        current_url=ch.url,
+        chapter_file_by_url=chapter_file_by_url,
+      )
+      cleaned = clean_html_for_kindle_epub2(
+        html_with_rewritten_links,
         keep_images=opts.keep_images,
         base_url=ch.url,
         image_rewriter=image_processor.rewrite if image_processor is not None else None,
