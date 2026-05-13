@@ -24,6 +24,7 @@ This file records manual validation runs and known behaviors for target sites.
 - Behavior: canonical start page resolves to `/home`; sidebar crawl works once links are kept within the original crawl scope instead of the canonical page path. Content is extracted from the rendered `#content-area`, avoiding app-shell chrome and repeated `Documentation Index` preambles.
 - Local validation (revalidated on 2026-05-11): `uvx --from . docs2epub https://agentskills.io/ out.epub` scraped 9 pages.
 - Local validation (revalidated on 2026-05-12): EPUB2 output preserves Shiki code block line breaks from the `/home` page instead of flattening entries like `my-skill/` into a single line.
+- Local validation (revalidated on 2026-05-12): EPUB2 output normalizes Mintlify-style `span[data-as="p"]` blocks so section headings stay separated from the following paragraph text.
 
 ## Trunk-Based Development
 - URL: `https://trunkbaseddevelopment.com/`

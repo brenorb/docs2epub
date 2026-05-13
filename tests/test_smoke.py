@@ -106,3 +106,17 @@ def test_kindle_cleaner_preserves_shiki_line_breaks_inside_code_blocks():
     keep_images=False,
   )
   assert "</span></span>\n<span class=\"line\">" in cleaned
+
+
+def test_kindle_cleaner_promotes_data_as_paragraph_spans():
+  cleaned = clean_html_for_kindle_epub2(
+    (
+      "<h3>Provide defaults, not menus</h3>"
+      '<span data-as="p">When multiple tools or approaches could work.</span>'
+    ),
+    keep_images=False,
+  )
+
+  assert "<h3>Provide defaults, not menus</h3>" in cleaned
+  assert "<p>When multiple tools or approaches could work.</p>" in cleaned
+  assert 'data-as="p"' not in cleaned
