@@ -46,6 +46,10 @@ def test_cli_main_uses_inferred_metadata_for_epub2(monkeypatch, tmp_path, capsys
 
 def test_cli_main_routes_epub3_to_build_epub(monkeypatch, tmp_path):
   captured: dict[str, object] = {}
+  monkeypatch.setattr(
+    "docs2epub.pandoc_epub2.ensure_pandoc",
+    lambda: pytest.fail("EPUB3 must not install Pandoc"),
+  )
 
   monkeypatch.setattr(
     "docs2epub.cli.iter_docusaurus_next",
@@ -75,3 +79,18 @@ def test_cli_main_fails_when_no_pages_are_scraped(monkeypatch, tmp_path):
 
   with pytest.raises(SystemExit, match="No pages scraped"):
     main(["https://example.com/docs", str(tmp_path / "book.epub")])
+
+
+def test_cli_reports_pandoc_failure_without_traceback(monkeypatch, tmp_path):
+  monkeypatch.setattr(
+    "docs2epub.cli.iter_docusaurus_next",
+    lambda options: [Chapter(index=1, title="Intro", url="https://example.com/docs", html="<p>x</p>")],
+  )
+
+  def fail_build(**kwargs):
+    raise RuntimeError("pandoc failed (exit 1): conversion failed")
+
+  monkeypatch.setattr("docs2epub.cli.build_epub2_with_pandoc", fail_build)
+  with pytest.raises(SystemExit, match="pandoc failed") as exc:
+    main(["https://example.com/docs", str(tmp_path / "book.epub")])
+  assert exc.value.__suppress_context__ is True

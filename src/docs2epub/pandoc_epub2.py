@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ from .book_links import canonicalize_book_url, rewrite_internal_book_links
 from .kindle_html import clean_html_for_kindle_epub2
 from .kindle_images import KindleImageProcessor
 from .model import Chapter
+from .pandoc import ensure_pandoc
 
 
 @dataclass(frozen=True)
@@ -69,11 +69,7 @@ def build_epub2_with_pandoc(
   verbose: bool,
   options: PandocEpub2Options | None = None,
 ) -> Path:
-  pandoc = shutil.which("pandoc")
-  if not pandoc:
-    raise RuntimeError(
-      "pandoc not found. Install pandoc (https://pandoc.org/installing.html) or use --format epub3."
-    )
+  pandoc = ensure_pandoc()
 
   opts = options or PandocEpub2Options()
   chapter_list = list(chapters)

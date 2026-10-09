@@ -19,6 +19,16 @@ uv run docs2epub --help
 
 ### uvx (no install)
 
+EPUB2 uses an existing `pandoc` on your PATH when available. Otherwise,
+docs2epub automatically downloads Pandoc 3.12.1 from its official GitHub release,
+verifies the archive's SHA-256 checksum, and caches the native executable for
+future runs. No separate Homebrew or system installation is required.
+The first EPUB2 run needs internet access; subsequent runs reuse the cache.
+Automatic installation supports macOS and Linux on Intel/AMD 64-bit and ARM64,
+and Windows on Intel/AMD 64-bit. Other platforms can install Pandoc manually
+or use `--format epub3`, which uses ebooklib without downloading Pandoc.
+Set `DOCS2EPUB_CACHE_DIR` to override the default OS user cache directory.
+
 ```bash
 uvx docs2epub \
   https://www.techinterviewhandbook.org/software-engineering-interview-guide/ \

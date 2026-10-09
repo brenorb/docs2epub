@@ -1,6 +1,6 @@
 [project]
 name = "docs2epub"
-version = "0.1.14"
+version = "0.1.15"
 description = "Turn documentation sites into an EPUB (Kindle-friendly)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,6 +15,7 @@ dependencies = [
   "lxml>=6.0.2",
   "markdown>=3.8.2",
   "pillow>=11.3.0",
+  "platformdirs>=4.0.0",
   "requests>=2.32.5",
 ]
 

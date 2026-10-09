@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -7,7 +8,7 @@ from docs2epub.pandoc_epub2 import PandocEpub2Options, build_epub2_with_pandoc
 
 
 def test_build_epub2_sets_resource_path_and_cwd(monkeypatch, tmp_path):
-  monkeypatch.setattr("docs2epub.pandoc_epub2.shutil.which", lambda _: "/usr/bin/pandoc")
+  monkeypatch.setattr("docs2epub.pandoc.shutil.which", lambda _: "/usr/bin/pandoc")
 
   captured: dict[str, object] = {}
 
@@ -47,7 +48,7 @@ def test_build_epub2_sets_resource_path_and_cwd(monkeypatch, tmp_path):
 
 
 def test_build_epub2_uses_absolute_output_path(monkeypatch, tmp_path):
-  monkeypatch.setattr("docs2epub.pandoc_epub2.shutil.which", lambda _: "/usr/bin/pandoc")
+  monkeypatch.setattr("docs2epub.pandoc.shutil.which", lambda _: "/usr/bin/pandoc")
 
   captured: dict[str, object] = {}
 
@@ -89,7 +90,11 @@ def test_build_epub2_uses_absolute_output_path(monkeypatch, tmp_path):
 
 
 def test_build_epub2_raises_when_pandoc_is_missing(monkeypatch, tmp_path):
-  monkeypatch.setattr("docs2epub.pandoc_epub2.shutil.which", lambda _: None)
+  monkeypatch.setattr("docs2epub.pandoc.shutil.which", lambda _: None)
+  def missing_pandoc():
+    raise RuntimeError("pandoc not found")
+
+  monkeypatch.setattr("docs2epub.pandoc_epub2.ensure_pandoc", missing_pandoc)
 
   with pytest.raises(RuntimeError, match="pandoc not found"):
     build_epub2_with_pandoc(
@@ -105,8 +110,32 @@ def test_build_epub2_raises_when_pandoc_is_missing(monkeypatch, tmp_path):
     )
 
 
+def test_build_epub2_uses_automatically_installed_pandoc(monkeypatch, tmp_path):
+  monkeypatch.setattr("docs2epub.pandoc.shutil.which", lambda _: None)
+  bundled_path = str(tmp_path / "package" / "pandoc")
+  monkeypatch.setattr("docs2epub.pandoc_epub2.ensure_pandoc", lambda: bundled_path)
+  captured = {}
+
+  def fake_run(cmd, **kwargs):
+    captured["cmd"] = cmd
+    return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+  monkeypatch.setattr("docs2epub.pandoc_epub2.subprocess.run", fake_run)
+  build_epub2_with_pandoc(
+    chapters=[Chapter(index=1, title="One", url="https://example.com/docs", html="<p>body</p>")],
+    out_file=tmp_path / "out.epub",
+    title="Book",
+    author="Author",
+    language="en",
+    publisher=None,
+    identifier=None,
+    verbose=False,
+  )
+  assert captured["cmd"][0] == bundled_path
+
+
 def test_build_epub2_summarizes_duplicate_and_missing_resource_warnings(monkeypatch, tmp_path, capsys):
-  monkeypatch.setattr("docs2epub.pandoc_epub2.shutil.which", lambda _: "/usr/bin/pandoc")
+  monkeypatch.setattr("docs2epub.pandoc.shutil.which", lambda _: "/usr/bin/pandoc")
 
   class Proc:
     returncode = 0
@@ -141,7 +170,7 @@ def test_build_epub2_summarizes_duplicate_and_missing_resource_warnings(monkeypa
 
 
 def test_build_epub2_rewrites_internal_links_to_book_chapters(monkeypatch, tmp_path):
-  monkeypatch.setattr("docs2epub.pandoc_epub2.shutil.which", lambda _: "/usr/bin/pandoc")
+  monkeypatch.setattr("docs2epub.pandoc.shutil.which", lambda _: "/usr/bin/pandoc")
 
   captured: dict[str, str] = {}
 
