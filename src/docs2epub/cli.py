@@ -125,17 +125,20 @@ def main(argv: list[str] | None = None) -> int:
   out_path_value = Path(out_value)
 
   if args.format == "epub2":
-    out_path = build_epub2_with_pandoc(
-      chapters=chapters,
-      out_file=out_path_value,
-      title=title,
-      author=author,
-      language=language,
-      publisher=args.publisher,
-      identifier=args.identifier,
-      verbose=args.verbose,
-      options=PandocEpub2Options(keep_images=args.keep_images),
-    )
+    try:
+      out_path = build_epub2_with_pandoc(
+        chapters=chapters,
+        out_file=out_path_value,
+        title=title,
+        author=author,
+        language=language,
+        publisher=args.publisher,
+        identifier=args.identifier,
+        verbose=args.verbose,
+        options=PandocEpub2Options(keep_images=args.keep_images),
+      )
+    except RuntimeError as exc:
+      raise SystemExit(str(exc)) from None
   else:
     meta = EpubMetadata(
       title=title,
