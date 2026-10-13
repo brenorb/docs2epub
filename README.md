@@ -17,6 +17,10 @@ uv run docs2epub --help
 
 ## Usage
 
+Internal links stay inside the book, including title fragments whose duplicate
+heading text is removed. EPUB2 chapter anchors are resolved to final XHTML paths
+by Pandoc; EPUB3 links use the chapter XHTML files directly.
+
 ### uvx (no install)
 
 EPUB2 uses an existing `pandoc` on your PATH when available. Otherwise,
