@@ -5,6 +5,8 @@ Turn documentation sites into an EPUB (Kindle-friendly).
 Initial focus: Docusaurus sites that expose a **Next** button (docs navigation).
 
 When multiple scraped pages link to each other, docs2epub rewrites those links to stay inside the generated EPUB.
+Both EPUB2 and EPUB3 preserve paragraph blocks declared with `data-as="p"`, so
+headings remain separate from the following text on documentation frontends.
 
 ## Install (dev)
 
