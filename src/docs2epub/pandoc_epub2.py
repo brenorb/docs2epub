@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .book_links import canonicalize_book_url, rewrite_internal_book_links
+from .book_links import canonicalize_book_url, namespace_html_ids, rewrite_internal_book_links
 from .kindle_html import clean_html_for_kindle_epub2
 from .kindle_images import KindleImageProcessor
 from .model import Chapter
@@ -21,7 +21,7 @@ class PandocEpub2Options:
   keep_images: bool = True
 
 
-def _wrap_html(title: str, body_html: str) -> str:
+def _wrap_html(title: str, body_html: str, *, chapter_id: str) -> str:
   return f"""<!doctype html>
 <html lang=\"en\">
   <head>
@@ -30,7 +30,7 @@ def _wrap_html(title: str, body_html: str) -> str:
     <title>{title}</title>
   </head>
   <body>
-    <h1>{title}</h1>
+    <h1 id="{chapter_id}">{title}</h1>
     {body_html}
   </body>
 </html>
@@ -74,7 +74,7 @@ def build_epub2_with_pandoc(
   opts = options or PandocEpub2Options()
   chapter_list = list(chapters)
   chapter_file_by_url = {
-    canonicalize_book_url(ch.url): f"chapter_{ch.index:04d}.html" for ch in chapter_list
+    canonicalize_book_url(ch.url): f"#docs2epub-chapter-{ch.index:04d}" for ch in chapter_list
   }
 
   out_path = Path(out_file).expanduser().resolve()
@@ -86,18 +86,21 @@ def build_epub2_with_pandoc(
 
     html_files: list[str] = []
     for ch in chapter_list:
-      html_with_rewritten_links = rewrite_internal_book_links(
-        ch.html,
-        current_url=ch.url,
-        chapter_file_by_url=chapter_file_by_url,
-      )
+      # Clean source-local links before introducing cross-chapter fragments.
       cleaned = clean_html_for_kindle_epub2(
-        html_with_rewritten_links,
+        ch.html,
         keep_images=opts.keep_images,
         base_url=ch.url,
         image_rewriter=image_processor.rewrite if image_processor is not None else None,
       )
-      html_doc = _wrap_html(ch.title, cleaned)
+      chapter_id = f"docs2epub-chapter-{ch.index:04d}"
+      namespaced = namespace_html_ids(cleaned, chapter_id)
+      rewritten = rewrite_internal_book_links(
+        namespaced,
+        current_url=ch.url,
+        chapter_file_by_url=chapter_file_by_url,
+      )
+      html_doc = _wrap_html(ch.title, rewritten, chapter_id=chapter_id)
       fp = tmp_path / f"chapter_{ch.index:04d}.html"
       fp.write_text(html_doc, encoding="utf-8")
       html_files.append(fp.name)

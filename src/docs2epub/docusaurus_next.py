@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 from markdown import markdown as render_markdown
 
+from .book_links import remove_heading_keep_anchor
 from .model import Chapter
 
 
@@ -617,7 +618,7 @@ def _remove_title_heading(article: Tag, title: str) -> None:
   for heading in article.find_all(re.compile(r"^h[1-6]$")):
     text = " ".join(heading.get_text(" ", strip=True).split()).lower()
     if text == normalized_title:
-      heading.decompose()
+      remove_heading_keep_anchor(heading)
       return
 
 

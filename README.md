@@ -5,6 +5,7 @@ Turn documentation sites into an EPUB (Kindle-friendly).
 Initial focus: Docusaurus sites that expose a **Next** button (docs navigation).
 
 When multiple scraped pages link to each other, docs2epub rewrites those links to stay inside the generated EPUB.
+Fragment links to chapter titles keep their targets when duplicate title text is removed.
 
 ## Install (dev)
 

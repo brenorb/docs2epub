@@ -9,7 +9,7 @@ from typing import Iterable
 from bs4 import BeautifulSoup
 from ebooklib import epub
 
-from .book_links import canonicalize_book_url, rewrite_internal_book_links
+from .book_links import canonicalize_book_url, remove_heading_keep_anchor, rewrite_internal_book_links
 from .model import Chapter
 
 
@@ -58,7 +58,7 @@ def _strip_first_h1(html_fragment: str) -> str:
   soup = BeautifulSoup(html_fragment, "lxml")
   first_h1 = soup.find("h1")
   if first_h1:
-    first_h1.decompose()
+    remove_heading_keep_anchor(first_h1)
   body = soup.find("body")
   if body:
     return body.decode_contents()

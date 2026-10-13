@@ -182,6 +182,7 @@ def test_build_epub2_rewrites_internal_links_to_book_chapters(monkeypatch, tmp_p
   def fake_run(cmd, **kwargs):
     cwd = Path(kwargs["cwd"])
     captured["chapter_1"] = (cwd / "chapter_0001.html").read_text(encoding="utf-8")
+    captured["chapter_2"] = (cwd / "chapter_0002.html").read_text(encoding="utf-8")
     return Proc()
 
   monkeypatch.setattr("docs2epub.pandoc_epub2.subprocess.run", fake_run)
@@ -212,4 +213,9 @@ def test_build_epub2_rewrites_internal_links_to_book_chapters(monkeypatch, tmp_p
     options=PandocEpub2Options(),
   )
 
-  assert 'href="chapter_0002.html#frag"' in captured["chapter_1"]
+  from bs4 import BeautifulSoup
+  first = BeautifulSoup(captured["chapter_1"], "lxml")
+  second = BeautifulSoup(captured["chapter_2"], "lxml")
+  href = first.find("a")["href"]
+  assert href.startswith("#"), "Pandoc inputs must use global anchors, not temporary filenames"
+  assert second.find(id=href[1:]) is not None
