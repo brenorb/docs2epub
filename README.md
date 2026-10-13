@@ -67,7 +67,36 @@ uv run docs2epub \
   --author "Yangshun Tay"
 ```
 
+## Optional Kindle email delivery
+
+Add `-k reader@kindle.com` (aliases `--kindle` and `--kindle-email`) to
+send the generated EPUB as an attachment. The default remains the existing
+Kindle-friendly EPUB2 conversion and metadata. No SMTP configuration is read
+unless email delivery is requested.
+
+Configure your SMTP provider through environment variables:
+
+```bash
+export DOCS2EPUB_SMTP_HOST=smtp.example.com
+export DOCS2EPUB_SMTP_FROM=sender@example.com
+export DOCS2EPUB_SMTP_USER=your-smtp-user
+# Set DOCS2EPUB_SMTP_PASSWORD through your shell or secret manager.
+uvx docs2epub https://example.com/docs book.epub -k reader@kindle.com
+```
+
+`DOCS2EPUB_SMTP_SECURITY` defaults to `starttls` with port 587. Set it to
+`ssl` for implicit TLS with default port 465. Override either port using
+`DOCS2EPUB_SMTP_PORT`. Certificate verification is enabled in both modes.
+The user and password must be supplied together; leave both unset for a
+provider that accepts authenticated-network relaying over TLS.
+
+Use your own Kindle address and add the `DOCS2EPUB_SMTP_FROM` address to
+Amazon's approved personal-document email list. Successful output means the
+SMTP server accepted the message; it does not confirm Amazon conversion or
+device delivery. If sending fails, the EPUB remains at the printed local path
+and the command exits with an error. A Gmail API transport is future work.
+
 ## Roadmap
 
 - Add additional discovery strategies: `sitemap.xml`, sidebar parsing, and explicit link lists.
-- Optional: send-to-kindle (email), once Gmail auth is set up.
+- Optional Gmail API transport for Kindle email delivery.
