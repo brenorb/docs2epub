@@ -11,6 +11,7 @@ from ebooklib import epub
 
 from .book_links import canonicalize_book_url, rewrite_internal_book_links
 from .model import Chapter
+from .html_blocks import promote_paragraph_blocks
 
 
 EPUB_CSS = """
@@ -48,9 +49,10 @@ class EpubMetadata:
 
 def _extract_body_inner_html(html: str) -> str:
   soup = BeautifulSoup(html, "lxml")
+  promote_paragraph_blocks(soup)
   body = soup.find("body")
   if not body:
-    return html
+    return str(soup)
   return body.decode_contents()
 
 

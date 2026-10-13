@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 from bs4 import BeautifulSoup
 
+from .html_blocks import promote_paragraph_blocks
+
 
 def clean_html_for_kindle_epub2(
   html_fragment: str,
@@ -52,17 +54,7 @@ def clean_html_for_kindle_epub2(
       span.string = u.string
     u.replace_with(span)
 
-  # Some doc frontends style paragraphs with inline tags such as
-  # <span data-as="p">...</span>, which causes flattened text in EPUB output.
-  for el in list(soup.select('[data-as="p"]')):
-    paragraph = soup.new_tag("p")
-    for attr, value in el.attrs.items():
-      if attr == "data-as":
-        continue
-      paragraph[attr] = value
-    for child in list(el.contents):
-      paragraph.append(child)
-    el.replace_with(paragraph)
+  promote_paragraph_blocks(soup)
 
   # Remove tabindex attributes (not allowed in EPUB2 XHTML).
   for el in soup.find_all(attrs={"tabindex": True}):
