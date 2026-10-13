@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from .docusaurus_next import DocusaurusNextOptions, iter_docusaurus_next
 from .epub import EpubMetadata, build_epub
+from .kindle_email import SmtpSettings, send_epub_to_kindle, validate_email
 from .pandoc_epub2 import PandocEpub2Options, build_epub2_with_pandoc
 
 
@@ -56,6 +57,8 @@ def _build_parser() -> argparse.ArgumentParser:
     default=None,
     help="Base URL used to resolve relative links (defaults to start-url).",
   )
+  p.add_argument("-k", "--kindle", "--kindle-email", dest="kindle_email", metavar="EMAIL",
+    help="Email the generated EPUB using DOCS2EPUB_SMTP_* settings.")
   p.add_argument("--max-pages", type=int, default=None)
   p.add_argument("--sleep-s", type=float, default=0.5)
 
@@ -104,6 +107,14 @@ def main(argv: list[str] | None = None) -> int:
 
   if not start_url or not out_value:
     raise SystemExit("Usage: docs2epub <START_URL> <OUT.epub> [options]")
+
+  smtp_settings = None
+  if args.kindle_email:
+    try:
+      args.kindle_email = validate_email(args.kindle_email)
+      smtp_settings = SmtpSettings.from_env()
+    except ValueError as exc:
+      raise SystemExit(str(exc)) from None
 
   inferred_title, inferred_author, inferred_language = _infer_defaults(start_url)
 
@@ -157,4 +168,10 @@ def main(argv: list[str] | None = None) -> int:
   size_mb = out_path.stat().st_size / (1024 * 1024)
   print(f"Scraped {len(chapters)} pages")
   print(f"EPUB written to: {out_path.resolve()} ({size_mb:.2f} MB)")
+  if smtp_settings is not None:
+    try:
+      send_epub_to_kindle(out_path, args.kindle_email, smtp_settings)
+    except (RuntimeError, ValueError, OSError) as exc:
+      raise SystemExit(str(exc)) from None
+    print("SMTP server accepted the EPUB for Kindle delivery.")
   return 0
