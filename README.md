@@ -5,7 +5,6 @@ Turn documentation sites into an EPUB (Kindle-friendly).
 Initial focus: Docusaurus sites that expose a **Next** button (docs navigation).
 
 When multiple scraped pages link to each other, docs2epub rewrites those links to stay inside the generated EPUB.
-Fragment links to chapter titles keep their targets when duplicate title text is removed.
 
 ## Install (dev)
 
@@ -17,6 +16,10 @@ uv run docs2epub --help
 ```
 
 ## Usage
+
+Internal links stay inside the book, including title fragments whose duplicate
+heading text is removed. EPUB2 chapter anchors are resolved to final XHTML paths
+by Pandoc; EPUB3 links use the chapter XHTML files directly.
 
 ### uvx (no install)
 
