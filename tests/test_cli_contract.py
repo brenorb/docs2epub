@@ -136,3 +136,49 @@ def test_network_error_is_actionable_and_suppresses_traceback(monkeypatch, tmp_p
   with pytest.raises(SystemExit, match="server did not respond") as exc:
     main(["https://example.com", str(tmp_path / "book.epub")])
   assert exc.value.__suppress_context__
+
+
+def test_stdout_destination_contains_only_epub_bytes(monkeypatch, tmp_path, capsysbinary):
+  stub_conversion(monkeypatch)
+  monkeypatch.chdir(tmp_path)
+  assert main(["https://example.com", "-"]) == 0
+  out, err = capsysbinary.readouterr()
+  assert out == b"epub"
+  assert b"Scraping" in err
+  assert list(tmp_path.iterdir()) == []
+
+
+def test_binary_output_is_rejected_on_a_terminal_before_network(monkeypatch):
+  monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda _: pytest.fail("should not scrape"))
+  with pytest.raises(SystemExit) as exc:
+    main(["https://example.com", "-"])
+  assert exc.value.code == 2
+
+
+def test_json_and_binary_stdout_are_mutually_exclusive(monkeypatch):
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda _: pytest.fail("should not scrape"))
+  with pytest.raises(SystemExit) as exc:
+    main(["https://example.com", "-", "--json"])
+  assert exc.value.code == 2
+
+
+def test_dry_run_does_not_scrape_or_create_output(monkeypatch, tmp_path, capsys):
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda _: pytest.fail("dry run should not scrape"))
+  output = tmp_path / "new-dir" / "book.epub"
+  assert main(["https://example.com", str(output), "--dry-run"]) == 0
+  out, err = capsys.readouterr()
+  assert "https://example.com" in out
+  assert str(output) in out
+  assert "Pandoc" in out
+  assert not err
+  assert not output.parent.exists()
+
+
+@pytest.mark.parametrize("url", ["http://[broken", "https://example.com:bad-port/docs"])
+def test_malformed_urls_are_usage_errors(url, monkeypatch, capsys):
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda _: pytest.fail("invalid URL reached network"))
+  with pytest.raises(SystemExit) as exc:
+    main([url, "book.epub"])
+  assert exc.value.code == 2
+  assert "HTTP or HTTPS URL" in capsys.readouterr().err

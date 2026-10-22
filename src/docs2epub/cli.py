@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 import sys
 import tempfile
 from importlib.metadata import version
@@ -79,6 +80,7 @@ Issues: https://github.com/brenorb/docs2epub/issues""",
   p.add_argument("--version", action="version", version=f"docs2epub {version('docs2epub')}")
   p.add_argument("--json", action="store_true", help="Print a JSON result summary to stdout.")
   p.add_argument("-q", "--quiet", action="store_true", help="Suppress progress messages; keep the result and errors.")
+  p.add_argument("-n", "--dry-run", action="store_true", help="Show the conversion plan without network requests or file writes.")
 
   p.add_argument("--title", default=None)
   p.add_argument("--author", default=None)
@@ -141,11 +143,20 @@ def main(argv: list[str] | None = None) -> int:
 
   if not start_url or not out_value:
     parser.error("provide a starting URL and output EPUB path; run docs2epub --help for examples")
+  if out_value == "-" and args.json:
+    parser.error("choose either binary EPUB stdout (-) or --json summary, not both")
+  if out_value == "-" and not args.dry_run and sys.stdout.isatty():
+    parser.error("refusing to write binary EPUB data to a terminal; redirect stdout or choose an output file")
 
   for label, value in (("start URL", start_url), ("base URL", args.base_url)):
     if value is not None:
-      parsed = urlparse(value)
-      if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+      try:
+        parsed = urlparse(value)
+        valid = parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+        parsed.port  # Validate malformed and out-of-range ports before networking.
+      except ValueError:
+        valid = False
+      if not valid:
         parser.error(f"{label} must be an absolute HTTP or HTTPS URL")
   if args.max_pages is not None and args.max_pages <= 0:
     parser.error("--max-pages must be a positive integer")
@@ -181,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         os.dup2(fd, sys.stdout.fileno())
       finally:
         os.close(fd)
-    except (OSError, ValueError):
+    except (OSError, ValueError, AttributeError):
       pass
     return 0
   except (requests.RequestException, RuntimeError, OSError) as exc:
@@ -189,21 +200,34 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _convert(args, options, title, author, language, out_value) -> int:
+  if args.dry_run:
+    plan = {"dry_run": True, "source": options.start_url,
+            "output": "-" if out_value == "-" else str(Path(out_value).expanduser().resolve()),
+            "format": args.format, "may_download_pandoc": args.format == "epub2"}
+    if args.json:
+      print(json.dumps(plan, indent=2))
+    else:
+      print(f"Source: {plan['source']}\nOutput: {plan['output']}\nFormat: {args.format.upper()}")
+      if args.format == "epub2":
+        print("Pandoc may be downloaded and cached if it is not installed.")
+    return 0
   if not args.quiet:
     print(f"Scraping {options.start_url}...", file=sys.stderr, flush=True)
   chapters = iter_docusaurus_next(options)
   if not chapters:
     raise SystemExit("No pages scraped (did not find article content).")
 
+  to_stdout = out_value == "-"
   out_path_value = Path(out_value).expanduser().resolve()
-  out_path_value.parent.mkdir(parents=True, exist_ok=True)
+  if not to_stdout:
+    out_path_value.parent.mkdir(parents=True, exist_ok=True)
   if not args.quiet:
     print(f"Writing {len(chapters)} pages as {args.format.upper()}...", file=sys.stderr, flush=True)
 
   # Stage in the destination filesystem so failed conversions and interruptions
   # leave existing EPUBs intact, and the final replacement is atomic.
-  with tempfile.TemporaryDirectory(prefix=".docs2epub-", dir=out_path_value.parent) as staging:
-    staged_path = Path(staging) / out_path_value.name
+  with tempfile.TemporaryDirectory(prefix=".docs2epub-", dir=None if to_stdout else out_path_value.parent) as staging:
+    staged_path = Path(staging) / ("book.epub" if to_stdout else out_path_value.name)
     if args.format == "epub2":
       out_path = build_epub2_with_pandoc(
         chapters=chapters,
@@ -231,6 +255,13 @@ def _convert(args, options, title, author, language, out_value) -> int:
         meta=meta,
       )
     size_bytes = out_path.stat().st_size
+    if to_stdout:
+      with out_path.open("rb") as source:
+        shutil.copyfileobj(source, sys.stdout.buffer)
+      sys.stdout.buffer.flush()
+      return 0
+    if out_path_value.exists():
+      os.chmod(out_path, out_path_value.stat().st_mode & 0o777)
     os.replace(out_path, out_path_value)
 
   if args.json:

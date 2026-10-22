@@ -34,10 +34,21 @@ the result and errors. `Ctrl-C` exits with status 130 and no traceback.
 Conversion failures leave an existing destination EPUB intact: completed
 output replaces the destination atomically.
 
+Use `-` as the destination to stream binary EPUB bytes to stdout. Redirect or
+pipe this stream; writing binary data directly to a terminal is rejected.
+Binary stdout and the `--json` summary cannot be combined. A dry run (`-n` /
+`--dry-run`) describes the conversion without scraping, downloading Pandoc,
+or creating output files. Existing files are atomically replaced on success.
+
 ```bash
 docs2epub https://example.com/docs book.epub --json > result.json
 docs2epub https://example.com/docs book.epub --quiet
+docs2epub https://example.com/docs - > book.epub
+docs2epub https://example.com/docs book.epub --dry-run
 ```
+
+See [CLI behavior and design decisions](docs/cli-design.md) for stream,
+exit-code, compatibility, and configuration contracts.
 
 ### uvx (no install)
 
