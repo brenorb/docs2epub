@@ -68,3 +68,71 @@ def test_configured_timeout_reaches_page_requests(monkeypatch):
   monkeypatch.setattr("docs2epub.docusaurus_next.requests.Session", Session)
   iter_docusaurus_next(DocusaurusNextOptions(start_url="https://example.com/docs", sleep_s=0, timeout=7.5))
   assert calls == [7.5]
+
+
+def stub_conversion(monkeypatch):
+  from pathlib import Path
+  from docs2epub.model import Chapter
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda _: [Chapter(index=1, title="Intro", url="https://example.com", html="<p>text</p>")])
+  def build(**kwargs):
+    output = Path(kwargs["out_file"])
+    output.write_bytes(b"epub")
+    return output
+  monkeypatch.setattr("docs2epub.cli.build_epub2_with_pandoc", build)
+  monkeypatch.setattr("docs2epub.cli.build_epub", build)
+
+
+def test_json_result_is_clean_stdout_with_progress_on_stderr(monkeypatch, tmp_path, capsys):
+  import json
+  stub_conversion(monkeypatch)
+  output = tmp_path / "book.epub"
+  assert main(["https://example.com", str(output), "--json"]) == 0
+  out, err = capsys.readouterr()
+  assert json.loads(out) == {"ok": True, "output": str(output), "pages": 1, "size_bytes": 4, "format": "epub2"}
+  assert "Scraping" in err
+  assert "Writing" in err
+
+
+def test_quiet_preserves_primary_result(monkeypatch, tmp_path, capsys):
+  stub_conversion(monkeypatch)
+  assert main(["https://example.com", str(tmp_path / "book.epub"), "-q"]) == 0
+  out, err = capsys.readouterr()
+  assert "EPUB written to:" in out
+  assert not err
+
+
+@pytest.mark.parametrize("format", ["epub2", "epub3"])
+def test_failed_conversion_preserves_existing_output(monkeypatch, tmp_path, format):
+  from pathlib import Path
+  stub_conversion(monkeypatch)
+  output = tmp_path / "book.epub"
+  output.write_bytes(b"original book")
+  def fail(**kwargs):
+    Path(kwargs["out_file"]).write_bytes(b"incomplete book")
+    raise OSError("disk full")
+  monkeypatch.setattr("docs2epub.cli.build_epub2_with_pandoc", fail)
+  monkeypatch.setattr("docs2epub.cli.build_epub", fail)
+  with pytest.raises(SystemExit, match="disk full"):
+    main(["https://example.com", str(output), "--format", format])
+  assert output.read_bytes() == b"original book"
+  assert list(tmp_path.iterdir()) == [output]
+
+
+def test_ctrl_c_reports_interrupt_without_traceback(monkeypatch, tmp_path, capsys):
+  def interrupt(_):
+    raise KeyboardInterrupt
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", interrupt)
+  assert main(["https://example.com", str(tmp_path / "book.epub")]) == 130
+  out, err = capsys.readouterr()
+  assert not out
+  assert "Interrupted" in err
+
+
+def test_network_error_is_actionable_and_suppresses_traceback(monkeypatch, tmp_path):
+  import requests
+  def timeout(_):
+    raise requests.Timeout("server did not respond")
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", timeout)
+  with pytest.raises(SystemExit, match="server did not respond") as exc:
+    main(["https://example.com", str(tmp_path / "book.epub")])
+  assert exc.value.__suppress_context__

@@ -41,7 +41,9 @@ def test_cli_main_uses_inferred_metadata_for_epub2(monkeypatch, tmp_path, capsys
   assert captured["language"] == "en"
   assert captured["chapters"][0].title == "Intro"
   assert out_file.exists()
-  assert "Scraped 1 pages" in capsys.readouterr().out
+  streams = capsys.readouterr()
+  assert "EPUB written to:" in streams.out
+  assert "Writing 1 pages" in streams.err
 
 
 def test_cli_main_routes_epub3_to_build_epub(monkeypatch, tmp_path):

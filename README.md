@@ -27,6 +27,18 @@ and the positional output path remain supported. Page requests time out after
 30 seconds by default; set `--timeout SECONDS` to change that limit. Invalid
 URLs, page limits, delays, and timeouts fail before any network work starts.
 
+Progress and Pandoc warnings go to stderr; stdout contains the result. For
+scripts, `--json` prints a JSON summary with `ok`, `output`, `pages`,
+`size_bytes`, and `format`. Use `-q` / `--quiet` to hide progress while keeping
+the result and errors. `Ctrl-C` exits with status 130 and no traceback.
+Conversion failures leave an existing destination EPUB intact: completed
+output replaces the destination atomically.
+
+```bash
+docs2epub https://example.com/docs book.epub --json > result.json
+docs2epub https://example.com/docs book.epub --quiet
+```
+
 ### uvx (no install)
 
 EPUB2 uses an existing `pandoc` on your PATH when available. Otherwise,
