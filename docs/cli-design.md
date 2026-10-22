@@ -60,3 +60,10 @@ validation, stdout/stderr, JSON, binary output, dry runs, request timeouts,
 interruption, and failed-write preservation. `uv build` checks packaging.
 Live documentation-site behavior is separate from these deterministic CLI
 contracts and can be checked manually with a disposable destination.
+
+`uv run python scripts/e2e_cli.py /path/to/installed/docs2epub` exercises an
+installed wheel against a loopback documentation server. It runs native Pandoc
+for EPUB2 and the EPUB3 builder, checks embedded images and rewritten chapter
+links, and covers JSON, binary stdout, dry runs, error recovery and closed pipes.
+The usual Pandoc cache/download behavior applies. Both formats honor
+`--keep-images` and `--no-images`; missing or unsupported images are dropped.
