@@ -28,6 +28,9 @@ and the positional output path remain supported. Page requests time out after
 URLs, page limits, delays, and timeouts fail before any network work starts.
 Timeouts and inter-page delays are capped at 86400 seconds (one day) to reject
 values that cannot be represented safely by networking and sleep APIs.
+By default, there is no page limit; use `--max-pages N` with a positive integer
+to cap the crawl. `--sleep-s SECONDS` sets the delay between page requests
+(default: `0.5`, range: `0` through `86400`; `0` disables the delay).
 
 Progress and Pandoc warnings go to stderr; stdout contains the result. For
 scripts, `--json` prints a JSON summary with `ok`, `output`, `pages`,

@@ -11,6 +11,11 @@ values. `--version` and Python's `docs2epub.__version__` identify the installed
 distribution. Long flags do not abbreviate. The original positional form and
 `--out` remain available alongside `-o` / `--output`.
 
+Help describes the positive `--max-pages` cap (default: no limit), the
+`--sleep-s` delay in seconds (default: `0.5`, range `0` through `86400`),
+and `-` as binary EPUB stdout in both output forms. Examples show redirection
+and a JSON dry run; binary output cannot be combined with `--json`.
+
 ## Results and diagnostics
 
 Human output is concise plain text with no ANSI color or animation, so it also

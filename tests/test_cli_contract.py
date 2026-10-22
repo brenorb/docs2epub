@@ -33,6 +33,40 @@ def test_version_matches_installed_distribution(capsys):
   assert not err
 
 
+def test_help_explains_page_limits_delays_and_binary_stdout(monkeypatch, capsys):
+  monkeypatch.setattr("docs2epub.cli._convert", lambda *_: pytest.fail("help must not convert or install Pandoc"))
+  assert main(["--help"]) == 0
+  out, err = capsys.readouterr()
+  text = " ".join(out.split())
+  assert "Maximum pages to scrape (default: no limit" in text
+  assert "Delay between page requests in seconds (default: 0.5" in text
+  assert "or '-' for binary EPUB on stdout" in text
+  assert "Binary stdout (-) requires redirection and cannot be combined with --json" in text
+  assert err == ""
+
+
+def test_documented_dry_run_example_is_safe_for_agents(monkeypatch, tmp_path, capsys):
+  import json
+  import shlex
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda *_: pytest.fail("example must not scrape"))
+  monkeypatch.setattr("docs2epub.cli.build_epub2_with_pandoc", lambda **_: pytest.fail("example must not build or install Pandoc"))
+  assert main(["--help"]) == 0
+  help_text = capsys.readouterr().out
+  examples = [shlex.split(line) for line in help_text.splitlines()
+              if line.strip().startswith("docs2epub ") and "--dry-run" in line]
+  assert examples, "help must show a noninteractive JSON plan example"
+  output = tmp_path / "new-directory" / "book.epub"
+  for example in examples:
+    args = [str(output) if arg == "book.epub" else arg for arg in example[1:]]
+    assert main(args) == 0
+    streams = capsys.readouterr()
+    plan = json.loads(streams.out)
+    assert plan["dry_run"] is True
+    assert plan["output"] == str(output)
+    assert streams.err == ""
+  assert not output.parent.exists()
+
+
 @pytest.mark.parametrize("args", [
   ["https://example.com"],
   ["not-a-url", "book.epub"],
