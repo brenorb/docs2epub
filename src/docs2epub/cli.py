@@ -36,6 +36,10 @@ def _build_parser() -> argparse.ArgumentParser:
     epilog="""Examples:
   docs2epub https://example.com/docs book.epub
   docs2epub https://example.com/docs book.epub --format epub3 --no-images
+  docs2epub https://example.com/docs - > book.epub
+  docs2epub https://example.com/docs book.epub --dry-run --json
+
+Binary stdout (-) requires redirection and cannot be combined with --json.
 
 Documentation: https://github.com/brenorb/docs2epub#readme
 Issues: https://github.com/brenorb/docs2epub/issues""",
@@ -51,7 +55,7 @@ Issues: https://github.com/brenorb/docs2epub/issues""",
   p.add_argument(
     "out_pos",
     nargs="?",
-    help="Output EPUB file path.",
+    help="Output EPUB file path, or '-' for binary EPUB on stdout.",
   )
 
   # Flag form (more explicit):
@@ -66,7 +70,7 @@ Issues: https://github.com/brenorb/docs2epub/issues""",
     "--out",
     dest="out",
     default=None,
-    help="Output EPUB file path (overrides positional out).",
+    help="Output EPUB file path, or '-' for binary EPUB on stdout (overrides positional out).",
   )
 
   p.add_argument(
@@ -74,8 +78,10 @@ Issues: https://github.com/brenorb/docs2epub/issues""",
     default=None,
     help="Base URL used to resolve relative links (defaults to start-url).",
   )
-  p.add_argument("--max-pages", type=int, default=None)
-  p.add_argument("--sleep-s", type=float, default=0.5)
+  p.add_argument("--max-pages", type=int, default=None,
+                 help="Maximum pages to scrape (default: no limit; must be positive).")
+  p.add_argument("--sleep-s", type=float, default=0.5,
+                 help="Delay between page requests in seconds (default: %(default)s; range: 0-86400).")
   p.add_argument("--timeout", type=float, default=30.0, help="Page request timeout in seconds (default: 30).")
   p.add_argument("--version", action="version", version=f"docs2epub {version('docs2epub')}")
   p.add_argument("--json", action="store_true", help="Print a JSON result summary to stdout.")
