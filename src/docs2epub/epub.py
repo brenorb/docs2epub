@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -11,6 +12,7 @@ from ebooklib import epub
 
 from .book_links import canonicalize_book_url, rewrite_internal_book_links
 from .model import Chapter
+from .kindle_images import KindleImageProcessor
 
 
 EPUB_CSS = """
@@ -65,18 +67,53 @@ def _strip_first_h1(html_fragment: str) -> str:
   return str(soup)
 
 
+def _prepare_images(chapters: list[Chapter], *, keep_images: bool):
+  prepared = []
+  images: dict[str, epub.EpubItem] = {}
+  with tempfile.TemporaryDirectory(prefix="docs2epub-images-") as temporary:
+    processor = KindleImageProcessor(assets_dir=Path(temporary) / "assets") if keep_images else None
+    for chapter in chapters:
+      soup = BeautifulSoup(chapter.html, "lxml")
+      chapter_images = soup.find_all("img")
+      if not chapter_images:
+        prepared.append(chapter)
+        continue
+      for image in chapter_images:
+        source = str(image.get("src") or "")
+        target = processor.rewrite(source, chapter.url) if processor and source else None
+        if target is None:
+          image.decompose()
+          continue
+        if target not in images:
+          suffix = Path(target).suffix
+          images[target] = epub.EpubItem(
+            uid=Path(target).stem,
+            file_name=target,
+            media_type="image/gif" if suffix == ".gif" else "image/png",
+            content=(Path(temporary) / target).read_bytes(),
+          )
+        image["src"] = target
+        for attr in ("srcset", "sizes", "loading", "onload", "onerror"):
+          image.attrs.pop(attr, None)
+      prepared.append(replace(chapter, html=str(soup)))
+  return prepared, list(images.values())
+
+
 def build_epub(
   *,
   chapters: Iterable[Chapter],
   out_file: str | Path,
   meta: EpubMetadata,
+  keep_images: bool = True,
 ) -> Path:
   out_path = Path(out_file)
   out_path.parent.mkdir(parents=True, exist_ok=True)
-  chapter_list = list(chapters)
+  chapter_list, images = _prepare_images(list(chapters), keep_images=keep_images)
   chapter_file_by_url = {canonicalize_book_url(ch.url): f"chap_{ch.index:03d}.xhtml" for ch in chapter_list}
 
   book = epub.EpubBook()
+  for image in images:
+    book.add_item(image)
 
   identifier = meta.identifier or f"urn:uuid:{uuid.uuid4()}"
   book.set_identifier(identifier)

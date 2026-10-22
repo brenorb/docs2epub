@@ -259,6 +259,7 @@ def _convert(args, options, title, author, language, out_value) -> int:
         chapters=chapters,
         out_file=staged_path,
         meta=meta,
+        keep_images=args.keep_images,
       )
     size_bytes = out_path.stat().st_size
     if to_stdout:
