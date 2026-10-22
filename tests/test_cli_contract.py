@@ -182,3 +182,23 @@ def test_malformed_urls_are_usage_errors(url, monkeypatch, capsys):
     main([url, "book.epub"])
   assert exc.value.code == 2
   assert "HTTP or HTTPS URL" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("option", ["--timeout", "--sleep-s"])
+def test_extreme_durations_are_usage_errors_before_network(option, monkeypatch, capsys):
+  monkeypatch.setattr("docs2epub.cli.iter_docusaurus_next", lambda _: pytest.fail("invalid duration reached network"))
+  with pytest.raises(SystemExit) as exc:
+    main(["https://example.com", "book.epub", option, "1e300"])
+  assert exc.value.code == 2
+  assert "86400" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("args", [[], ["--help"], ["--version"]])
+def test_information_commands_handle_closed_stdout(args):
+  import subprocess
+  import sys
+  command = "import sys; from docs2epub.cli import main; sys.exit(main(" + repr(args) + "))"
+  process = subprocess.Popen([sys.executable, "-c", command], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  process.stdout.close()
+  assert process.wait(timeout=10) == 0
+  assert process.stderr.read() == b""

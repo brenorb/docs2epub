@@ -31,6 +31,8 @@ automation needs no `--no-input` switch.
 URLs, page counts, delays, and request timeouts are checked before scraping.
 `--timeout` controls page request timeouts (default 30 seconds); image and
 Pandoc installation requests retain their existing bounded timeouts.
+Both page timeouts and inter-page delays are limited to 86400 seconds to avoid
+platform timer overflows.
 `--dry-run` previews source, destination, format, and potential Pandoc download
 without network calls or file writes. HTTP proxy environment variables are
 handled by Requests. No credentials or telemetry options are added.

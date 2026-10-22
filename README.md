@@ -26,6 +26,8 @@ Use `-o` or `--output` as the standard spelling for the output path; `--out`
 and the positional output path remain supported. Page requests time out after
 30 seconds by default; set `--timeout SECONDS` to change that limit. Invalid
 URLs, page limits, delays, and timeouts fail before any network work starts.
+Timeouts and inter-page delays are capped at 86400 seconds (one day) to reject
+values that cannot be represented safely by networking and sleep APIs.
 
 Progress and Pandoc warnings go to stderr; stdout contains the result. For
 scripts, `--json` prints a JSON summary with `ok`, `output`, `pages`,

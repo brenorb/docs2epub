@@ -120,6 +120,29 @@ Issues: https://github.com/brenorb/docs2epub/issues""",
 
 
 def main(argv: list[str] | None = None) -> int:
+  try:
+    result = _run(argv)
+    sys.stdout.flush()
+    return result
+  except KeyboardInterrupt:
+    print("Interrupted. The destination EPUB was not partially replaced.", file=sys.stderr)
+    return 130
+  except BrokenPipeError:
+    # Also covers informational commands and Python's buffered output at exit.
+    try:
+      fd = os.open(os.devnull, os.O_WRONLY)
+      try:
+        os.dup2(fd, sys.stdout.fileno())
+      finally:
+        os.close(fd)
+    except (OSError, ValueError, AttributeError):
+      pass
+    return 0
+  except (requests.RequestException, RuntimeError, OSError) as exc:
+    raise SystemExit(f"docs2epub: {exc}") from None
+
+
+def _run(argv: list[str] | None) -> int:
   parser = _build_parser()
   argv = list(sys.argv[1:] if argv is None else argv)
   if not argv:
@@ -160,10 +183,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"{label} must be an absolute HTTP or HTTPS URL")
   if args.max_pages is not None and args.max_pages <= 0:
     parser.error("--max-pages must be a positive integer")
-  if not math.isfinite(args.sleep_s) or args.sleep_s < 0:
-    parser.error("--sleep-s must be a finite nonnegative number")
-  if not math.isfinite(args.timeout) or args.timeout <= 0:
-    parser.error("--timeout must be a finite positive number")
+  if not math.isfinite(args.sleep_s) or not 0 <= args.sleep_s <= 86400:
+    parser.error("--sleep-s must be a finite nonnegative number no greater than 86400 seconds")
+  if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400:
+    parser.error("--timeout must be a finite positive number no greater than 86400 seconds")
 
   inferred_title, inferred_author, inferred_language = _infer_defaults(start_url)
 
@@ -179,24 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     timeout=args.timeout,
   )
 
-  try:
-    return _convert(args, options, title, author, language, out_value)
-  except KeyboardInterrupt:
-    print("Interrupted. The destination EPUB was not partially replaced.", file=sys.stderr)
-    return 130
-  except BrokenPipeError:
-    # Avoid another broken-pipe error when Python flushes stdout at shutdown.
-    try:
-      fd = os.open(os.devnull, os.O_WRONLY)
-      try:
-        os.dup2(fd, sys.stdout.fileno())
-      finally:
-        os.close(fd)
-    except (OSError, ValueError, AttributeError):
-      pass
-    return 0
-  except (requests.RequestException, RuntimeError, OSError) as exc:
-    raise SystemExit(f"docs2epub: {exc}") from None
+  return _convert(args, options, title, author, language, out_value)
 
 
 def _convert(args, options, title, author, language, out_value) -> int:
