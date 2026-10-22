@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import math
+import sys
+from importlib.metadata import version
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -22,6 +25,14 @@ def _build_parser() -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(
     prog="docs2epub",
     description="Turn documentation sites into an EPUB (Kindle-friendly).",
+    allow_abbrev=False,
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog="""Examples:
+  docs2epub https://example.com/docs book.epub
+  docs2epub https://example.com/docs book.epub --format epub3 --no-images
+
+Documentation: https://github.com/brenorb/docs2epub#readme
+Issues: https://github.com/brenorb/docs2epub/issues""",
   )
 
   # Short positional form (for uvx):
@@ -45,6 +56,7 @@ def _build_parser() -> argparse.ArgumentParser:
     help="Starting URL for scraping (overrides positional start_url).",
   )
   p.add_argument(
+    "-o", "--output",
     "--out",
     dest="out",
     default=None,
@@ -58,6 +70,8 @@ def _build_parser() -> argparse.ArgumentParser:
   )
   p.add_argument("--max-pages", type=int, default=None)
   p.add_argument("--sleep-s", type=float, default=0.5)
+  p.add_argument("--timeout", type=float, default=30.0, help="Page request timeout in seconds (default: 30).")
+  p.add_argument("--version", action="version", version=f"docs2epub {version('docs2epub')}")
 
   p.add_argument("--title", default=None)
   p.add_argument("--author", default=None)
@@ -97,13 +111,41 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-  args = _build_parser().parse_args(argv)
+  parser = _build_parser()
+  argv = list(sys.argv[1:] if argv is None else argv)
+  if not argv:
+    print("Turn documentation sites into an EPUB (Kindle-friendly).\n\n"
+          "Usage: docs2epub <START_URL> <OUT.epub> [options]\n\n"
+          "Examples:\n  docs2epub https://example.com/docs book.epub\n"
+          "  docs2epub https://example.com/docs book.epub --format epub3\n\n"
+          "Run docs2epub --help for all options.")
+    return 0
+  options = argv[:argv.index("--")] if "--" in argv else argv
+  if any(flag in options for flag in ("-h", "--help")):
+    parser.print_help()
+    return 0
+  if "--version" in options:
+    print(f"docs2epub {version('docs2epub')}")
+    return 0
+  args = parser.parse_args(argv)
 
   start_url = args.start_url or args.start_url_pos
   out_value = args.out or args.out_pos
 
   if not start_url or not out_value:
-    raise SystemExit("Usage: docs2epub <START_URL> <OUT.epub> [options]")
+    parser.error("provide a starting URL and output EPUB path; run docs2epub --help for examples")
+
+  for label, value in (("start URL", start_url), ("base URL", args.base_url)):
+    if value is not None:
+      parsed = urlparse(value)
+      if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        parser.error(f"{label} must be an absolute HTTP or HTTPS URL")
+  if args.max_pages is not None and args.max_pages <= 0:
+    parser.error("--max-pages must be a positive integer")
+  if not math.isfinite(args.sleep_s) or args.sleep_s < 0:
+    parser.error("--sleep-s must be a finite nonnegative number")
+  if not math.isfinite(args.timeout) or args.timeout <= 0:
+    parser.error("--timeout must be a finite positive number")
 
   inferred_title, inferred_author, inferred_language = _infer_defaults(start_url)
 
@@ -116,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     base_url=args.base_url,
     max_pages=args.max_pages,
     sleep_s=args.sleep_s,
+    timeout=args.timeout,
   )
 
   chapters = iter_docusaurus_next(options)

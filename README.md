@@ -17,6 +17,16 @@ uv run docs2epub --help
 
 ## Usage
 
+Run `docs2epub` for a short introduction, `docs2epub --help` for examples and
+all options, or `docs2epub --version` to identify the installed distribution.
+Help remains available even when other options are invalid. Long option names
+must be written in full, so scripts do not depend on ambiguous abbreviations.
+
+Use `-o` or `--output` as the standard spelling for the output path; `--out`
+and the positional output path remain supported. Page requests time out after
+30 seconds by default; set `--timeout SECONDS` to change that limit. Invalid
+URLs, page limits, delays, and timeouts fail before any network work starts.
+
 ### uvx (no install)
 
 EPUB2 uses an existing `pandoc` on your PATH when available. Otherwise,
