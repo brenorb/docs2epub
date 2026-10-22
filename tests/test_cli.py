@@ -41,10 +41,13 @@ def test_cli_main_uses_inferred_metadata_for_epub2(monkeypatch, tmp_path, capsys
   assert captured["language"] == "en"
   assert captured["chapters"][0].title == "Intro"
   assert out_file.exists()
-  assert "Scraped 1 pages" in capsys.readouterr().out
+  streams = capsys.readouterr()
+  assert "EPUB written to:" in streams.out
+  assert "Writing 1 pages" in streams.err
 
 
-def test_cli_main_routes_epub3_to_build_epub(monkeypatch, tmp_path):
+@pytest.mark.parametrize("keep_images", [True, False])
+def test_cli_main_routes_epub3_to_build_epub(monkeypatch, tmp_path, keep_images):
   captured: dict[str, object] = {}
   monkeypatch.setattr(
     "docs2epub.pandoc_epub2.ensure_pandoc",
@@ -65,12 +68,14 @@ def test_cli_main_routes_epub3_to_build_epub(monkeypatch, tmp_path):
   monkeypatch.setattr("docs2epub.cli.build_epub", fake_build_epub)
 
   out_file = tmp_path / "book.epub"
-  rc = main(["--format", "epub3", "--start-url", "https://example.com/docs", "--out", str(out_file)])
+  rc = main(["--format", "epub3", "--start-url", "https://example.com/docs", "--out", str(out_file),
+             *([] if keep_images else ["--no-images"])])
 
   assert rc == 0
   assert captured["meta"].title == "example.com"
   assert captured["meta"].author == "example.com"
   assert captured["meta"].language == "en"
+  assert captured["keep_images"] is keep_images
   assert out_file.exists()
 
 

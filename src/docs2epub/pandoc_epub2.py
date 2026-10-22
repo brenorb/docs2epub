@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -146,10 +147,10 @@ def build_epub2_with_pandoc(
       raise RuntimeError(f"pandoc failed (exit {proc.returncode}):\n{proc.stderr.strip()}")
 
     if verbose and proc.stderr.strip():
-      print(proc.stderr.strip())
+      print(proc.stderr.strip(), file=sys.stderr)
     elif proc.stderr.strip():
       summary = _summarize_pandoc_warnings(proc.stderr)
       if summary:
-        print(summary)
+        print(summary, file=sys.stderr)
 
   return out_path
