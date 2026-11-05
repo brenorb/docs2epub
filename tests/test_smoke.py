@@ -3,6 +3,44 @@ from docs2epub.kindle_html import clean_html_for_kindle_epub2
 from docs2epub.model import Chapter
 
 
+def test_epub3_embeds_images_and_honors_no_images(tmp_path, monkeypatch):
+  import io
+  import zipfile
+  from PIL import Image
+
+  buffer = io.BytesIO()
+  Image.new("RGB", (2, 1), "red").save(buffer, format="PNG")
+  requests = []
+
+  class Response:
+    headers = {"content-type": "image/png"}
+    content = buffer.getvalue()
+
+    def raise_for_status(self):
+      pass
+
+  def get(_session, url, **kwargs):
+    requests.append(url)
+    return Response()
+
+  monkeypatch.setattr("requests.Session.get", get)
+  chapters = [Chapter(index=1, title="Images", url="https://example.com/docs/intro",
+                      html='<p>Body</p><img src="../pixel.png" srcset="remote.png 2x"/>')]
+  meta = EpubMetadata(title="T", author="A")
+  path = build_epub(chapters=chapters, out_file=tmp_path / "images.epub", meta=meta)
+  with zipfile.ZipFile(path) as book:
+    assert any(name.endswith(".png") for name in book.namelist())
+    html = book.read("EPUB/chap_001.xhtml")
+    assert b'src="assets/img-' in html and b"srcset" not in html
+  assert requests == ["https://example.com/pixel.png"]
+  requests.clear()
+  path = build_epub(chapters=chapters, out_file=tmp_path / "no-images.epub", meta=meta, keep_images=False)
+  with zipfile.ZipFile(path) as book:
+    assert b"<img" not in book.read("EPUB/chap_001.xhtml")
+    assert not any(name.endswith(".png") for name in book.namelist())
+  assert requests == []
+
+
 def test_build_epub3_smoke(tmp_path):
   out = tmp_path / "book.epub"
   chapters = [

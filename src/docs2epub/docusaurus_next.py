@@ -73,6 +73,7 @@ class DocusaurusNextOptions:
   max_pages: int | None = None
   sleep_s: float = 0.5
   user_agent: str = DEFAULT_USER_AGENT
+  timeout: float = 30.0
 
 
 def _slugify_filename(text: str) -> str:
@@ -659,7 +660,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
   chapters: list[Chapter] = []
 
   def fetch_soup(target_url: str) -> BeautifulSoup:
-    resp = session.get(target_url, timeout=30)
+    resp = session.get(target_url, timeout=options.timeout)
     resp.raise_for_status()
     return BeautifulSoup(resp.text, "lxml")
 
@@ -694,7 +695,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       redirects_seen.add(key)
 
       try:
-        resp = session.get(current_url, timeout=30)
+        resp = session.get(current_url, timeout=options.timeout)
         resp.raise_for_status()
       except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else None
@@ -795,7 +796,7 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
     return chapters
 
   if llms_index_url and not sidebar_urls:
-    llms_resp = session.get(llms_index_url, timeout=30)
+    llms_resp = session.get(llms_index_url, timeout=options.timeout)
     llms_resp.raise_for_status()
     for target_url in _extract_llms_urls(
       llms_resp.text,

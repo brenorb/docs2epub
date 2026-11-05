@@ -163,7 +163,9 @@ def test_build_epub2_summarizes_duplicate_and_missing_resource_warnings(monkeypa
     options=PandocEpub2Options(),
   )
 
-  output = capsys.readouterr().out
+  streams = capsys.readouterr()
+  assert streams.out == ""
+  output = streams.err
   assert "pandoc warnings: 3" in output
   assert "Duplicate identifier: 2" in output
   assert "Missing resources: 1" in output
