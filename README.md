@@ -55,6 +55,10 @@ docs2epub https://example.com/docs book.epub --dry-run
 See [CLI behavior and design decisions](docs/cli-design.md) for stream,
 exit-code, compatibility, and configuration contracts.
 
+Links to pages included in the book stay inside the EPUB, including title
+fragments whose duplicate heading text is removed. Pandoc resolves EPUB2 chapter
+anchors to the final XHTML paths. EPUB3 links use the chapter XHTML files directly.
+
 ### uvx (no install)
 
 EPUB2 uses an existing `pandoc` on your PATH when available. Otherwise,

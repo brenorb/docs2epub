@@ -18,6 +18,9 @@ import zipfile
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from posixpath import dirname, join, normpath
+from urllib.parse import unquote, urlsplit
+from xml.etree import ElementTree
 
 
 def png() -> bytes:
@@ -42,9 +45,11 @@ class Documentation(BaseHTTPRequestHandler):
     else:
       marker = "E2E_INTRO" if self.path.endswith("intro") else "E2E_NEXT"
       content = (f'<html><aside class="sidebar"><a href="/docs/intro">Intro</a>'
-                 f'<a href="/docs/next">Next</a></aside><article><h1>{marker}</h1>'
+                 f'<a href="/docs/next">Next</a></aside><article><h1 id="title">{marker}</h1>'
                  f'<p>{marker}_CONTENT</p><h2 id="target">Details</h2>'
+                 '<a href="#target">Stay in this chapter</a>'
                  '<a href="/docs/next#target">Continue inside the book</a>'
+                 '<a href="/docs/next#title">Jump to the next title</a>'
                  '<img src="/pixel.png" alt="E2E image"></article></html>').encode()
       kind = "text/html"
     self.send_response(200)
@@ -65,10 +70,29 @@ def verify_book(data: bytes):
     assert book.read("mimetype") == b"application/epub+zip"
     assert "META-INF/container.xml" in book.namelist()
     assert any(name.endswith(".opf") for name in book.namelist())
-    documents = b"\n".join(book.read(name) for name in book.namelist() if name.endswith((".html", ".xhtml")))
-    assert b"E2E_INTRO_CONTENT" in documents and b"E2E_NEXT_CONTENT" in documents
     assert any(name.endswith(".png") for name in book.namelist()), book.namelist()
-    assert b'/docs/next#target"' not in documents, "internal link still points to the server"
+    documents = {name: book.read(name) for name in book.namelist() if name.endswith((".html", ".xhtml"))}
+    chapters = {}
+    for marker in (b"E2E_INTRO_CONTENT", b"E2E_NEXT_CONTENT"):
+      matches = [name for name, content in documents.items() if marker in content]
+      assert len(matches) == 1, (marker, matches)
+      chapters[matches[0]] = ElementTree.fromstring(documents[matches[0]])
+    intro_path, next_path = chapters
+    for source in (intro_path, next_path):
+      expected = {
+        "Stay in this chapter": source,
+        "Continue inside the book": next_path,
+        "Jump to the next title": next_path,
+      }
+      for label, destination in expected.items():
+        anchors = [a for a in chapters[source].findall(".//{*}a") if "".join(a.itertext()) == label]
+        assert len(anchors) == 1, (source, label)
+        href = urlsplit(anchors[0].get("href", ""))
+        assert not href.scheme and not href.netloc and href.fragment, (source, label, href)
+        target = normpath(join(dirname(source), unquote(href.path))) if href.path else source
+        assert target == destination, (source, label, target, destination)
+        fragment = unquote(href.fragment)
+        assert sum(el.get("id") == fragment for el in chapters[target].iter()) == 1, (target, fragment)
 
 
 def main() -> int:
