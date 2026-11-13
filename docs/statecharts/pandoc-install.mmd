@@ -1,0 +1,20 @@
+---
+title: "Find or install Pandoc for EPUB2"
+---
+stateDiagram-v2
+  s0: EPUB2 requires Pandoc
+  s1: Existing Pandoc ready
+  s2: Downloading to temporary storage
+  s3: Installation stopped
+  s4: Archive checksum matches
+  s5: Candidate reports its version
+  s6: Executable installed in cache
+  [*] --> s0
+  s0 --> s1: Find Pandoc on PATH or in cache
+  s0 --> s2: Select the platform archive
+  s0 --> s3: Platform has no automatic installer
+  s2 --> s3: Download or checksum check fails
+  s2 --> s4: Download and verify the archive
+  s4 --> s3: Candidate extraction or probe fails
+  s4 --> s5: Extract the binary and probe its version
+  s5 --> s6: Replace the cache entry

@@ -1,0 +1,14 @@
+---
+title: "Preview or start an EPUB conversion"
+---
+stateDiagram-v2
+  s0: Command entered
+  s1: Help or version printed
+  s2: Usage error shown
+  s3: Conversion plan printed
+  s4: Scraping started
+  [*] --> s0
+  s0 --> s4: Validate arguments and start conversion
+  s0 --> s1: Request help or version
+  s0 --> s2: Supply invalid arguments or incompatible output
+  s0 --> s3: Validate arguments and show dry run

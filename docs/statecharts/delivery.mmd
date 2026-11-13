@@ -1,0 +1,21 @@
+---
+title: "Deliver a documentation EPUB"
+---
+stateDiagram-v2
+  s0: Scraping chapters
+  s1: Writing EPUB in temporary storage
+  s2: Delivery interrupted or failed
+  s3: Completed EPUB ready for delivery
+  s4: Streaming EPUB bytes
+  s5: Destination atomically replaced
+  s6: EPUB sent to stdout
+  [*] --> s0
+  s0 --> s1: Chapters collected
+  s0 --> s2: Work fails or is interrupted
+  s1 --> s2: Work fails or is interrupted
+  s1 --> s3: Writer finishes the book
+  s3 --> s2: Work fails or is interrupted
+  s3 --> s5: Commit to file
+  s3 --> s4: Copy to redirected stdout
+  s4 --> s2: Work fails or is interrupted
+  s4 --> s6: Flush output
