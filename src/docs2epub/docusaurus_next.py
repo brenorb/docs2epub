@@ -832,15 +832,12 @@ def iter_docusaurus_next(options: DocusaurusNextOptions) -> list[Chapter]:
       idx += 1
     return chapters
 
-  # Fallback: follow next/previous navigation.
+  # Fallback: follow Next navigation.
   current_url = url
   soup = initial_soup
   while True:
-    if options.max_pages is not None and len(chapters) >= options.max_pages:
-      break
-
     article = consume_page(current_url, soup=soup)
-    if article is None:
+    if article is None or (options.max_pages is not None and len(chapters) >= options.max_pages):
       break
 
     next_url = _extract_next_url(soup, base_url=base_url)
