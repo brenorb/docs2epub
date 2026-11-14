@@ -1,3 +1,4 @@
+import pytest
 import requests
 
 from docs2epub.docusaurus_next import DocusaurusNextOptions, iter_docusaurus_next
@@ -154,3 +155,39 @@ def test_next_crawl_stops_fetching_at_chapter_limit(monkeypatch):
 
   assert [chapter.title for chapter in chapters] == ["Intro"]
   assert fetched == [start_url]
+
+
+@pytest.mark.parametrize("use_explicit_base", [False, True], ids=["current-page", "explicit-base"])
+def test_next_crawl_resolves_relative_links(monkeypatch, use_explicit_base):
+  origin = "https://example.com"
+  start_url = f"{origin}/docs/intro"
+  nested_url = f"{origin}/docs/nested/first"
+  base_url = f"{origin}/override/" if use_explicit_base else None
+  final_url = f"{origin}/override/second" if use_explicit_base else f"{origin}/docs/nested/second"
+  pages = {
+    start_url: ("Intro", "/docs/nested/first"),
+    nested_url: ("Nested first", "second"),
+    final_url: ("Second", None),
+  }
+  fetched = []
+
+  def get(_session, url, *, timeout):
+    fetched.append(url)
+    assert url in pages, f"unexpected page requested: {url}"
+    title, next_href = pages[url]
+    html = f"<article><h1>{title}</h1><p>Chapter text</p></article>"
+    if next_href:
+      html += f'<nav aria-label="Docs pages"><a href="{next_href}">Next</a></nav>'
+    response = requests.Response()
+    response.url = url
+    response.status_code = 200
+    response._content = html.encode()
+    return response
+
+  monkeypatch.setattr(requests.Session, "get", get)
+  options = DocusaurusNextOptions(start_url=start_url, base_url=base_url, sleep_s=0)
+
+  chapters = iter_docusaurus_next(options)
+
+  assert [chapter.url for chapter in chapters] == [start_url, nested_url, final_url]
+  assert fetched == [start_url, nested_url, final_url]
